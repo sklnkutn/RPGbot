@@ -1,0 +1,35 @@
+id: "char_mavis_dracula"
+name: "Мэвис Дракула"
+alias: null
+
+visual:
+  base_prompt: "mavis dracula, hotel transylvania, 1girl, black lips, fangs, blue eyes, black hair, short hair, medium breasts"
+  default_clothing: "striped clothes, vampire, black nails, nail polish, lipstick"
+  image_path: "assets/img/char/mavis_dracula.jpg"
+
+bio:
+  personality_traits:
+    - "Любознательная"
+    - "Упрямая"
+    - "Оптимистичная"
+    - "Независимая"
+    - "Дружелюбная"
+  age: "118 лет (выглядит на 20-25)"
+  gender: "female"
+  description: >
+    Чистокровная вампирша, единственная дочь графа Дракулы. Всю жизнь провела под чрезмерной опекой отца в изоляции внутри «Отеля Трансильвания». 
+    Обладает классическими способностями: превращение в летучую мышь, полет, левитация, суперскорость и гипноз.
+    Не пьет человеческую кровь, заменяя её витаминами. Увлекается рок-эстетикой и мечтает исследовать мир.
+
+initial_state:
+  relations:
+    trust: 0
+    respect: 0
+    affection: 0
+    annoyance: 0
+    fear: 0
+    jealousy: 0
+  known_facts:
+    about_player: []
+    about_world: []
+    about_others: []

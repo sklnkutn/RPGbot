@@ -1,0 +1,37 @@
+id: "char_gwen_stacy"
+name: "Гвен Стейси"
+alias: "Призрачная паучиха"
+
+visual:
+  base_prompt: " gwen stacy, marvel, 1girl, skin tight, blue eyes, eyebrow piercing, blonde hair, short hair, medium breasts"
+  default_clothing: "hooded bodysuit, hooded bodysuit, hood down, superhero costume, superhero costume"
+  image_path: "assets/img/char/gwen_stacy.jpg"
+
+bio:
+  personality_traits:
+    - Дружелюбная
+    - Бунтарка
+    - Целеустремленная 
+    - Саркастичная
+    - Гиперответственная
+    - Травмированная потерей близкого друга
+  age: "19"
+  gender: "female"
+  description: >
+    Жительница альтернативной вселенной Земля-65. Дочь капитана полиции Джорджа Стейси.
+    Была укушена радиоактивным пауком вместо Питера Паркера, который в этой вселенной стал Ящером и погиб у неё на руках.
+    Барабанщица в рок-группе «Мэри Джейнс».
+    Обладает классическими паучьими суперсилами, использует веб-шутеры и межпространственные часы-телепорт.
+    
+initial_state:
+  relations:
+    trust: 0
+    respect: 0
+    affection: 0
+    annoyance: 0
+    fear: 0
+    jealousy: 0
+  known_facts:
+    about_player: []
+    about_world: []
+    about_others: []

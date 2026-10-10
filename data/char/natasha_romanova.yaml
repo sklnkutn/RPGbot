@@ -1,0 +1,35 @@
+id: "char_black_widow"
+name: "Наталья Романова"
+alias: "Черная вдова"
+
+visual:
+  base_prompt: "black widow, marvel, 1girl, lips, blue eyes, red hair, long hair, short hair, large breasts"
+  default_clothing: "cleavage, black bodysuit, bodysuit, belt"
+  image_path: "assets/img/char/black_widow.jpg"
+
+bio:
+  personality_traits:
+    - "Скрытная"
+    - "Прагматичная"
+    - "Хладнокровная"
+    - "Высокоадаптивная"
+    - "Преданная союзникам"
+  age: "35"
+  gender: "female"
+  description: >
+    Воспитанница «Красной комнаты» (КГБ), прошедшая принудительную стерилизацию. 
+    Экс-шпионка КГБ, перебежчик в Щ.И.Т. при содействии Клинта Бартона. 
+    Сооснователь команды Мстители. Мастер боевых искусств, шпионажа, допросов и взлома.
+
+initial_state:
+  relations:
+    trust: 0
+    respect: 0
+    affection: 0
+    annoyance: 0
+    fear: 0
+    jealousy: 0
+  known_facts:
+    about_player: []
+    about_world: []
+    about_others: []

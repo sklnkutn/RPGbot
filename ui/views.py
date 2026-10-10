@@ -1,11 +1,5 @@
 from nicegui import ui
-
-#dialog = ui.dialog() #Объект диалога
-
-#with dialog, ui.card().classes("w-full max-w-lg"): #Структура объекта диалога
-#    ui.label("Выберите до 3 персонажей").classes("text-lg font-bold")
-#    #карточки персонажей
-#    ui.button("Закрыть", on_click=dialog.close)
+from services.loader import load_characters
 
 def setup_routes(): #Регистрация декораторов модулей и тд
     """Регистрация всех страниц и маршрутов UI"""
@@ -13,16 +7,60 @@ def setup_routes(): #Регистрация декораторов модуле�
     @ui.page("/") #формирование главной страницы
     async def main_page():
 
+        selected_characters = [] #Состояние выбранных персонажей(хранение ID)
+
+        characters = load_characters () #Загрузка персонажей из YAML при открытии страницы
+
         #формирование опции диалогового окна внутри страницы для персонажей
         with ui.dialog() as char_dialog, ui.card().classes("w-full max-w-lg"):
             ui.label("Выберите до 3 персонажей").classes("text-lg font-bold q-mb-md")
-            #Карточки персонажей
-            ui.label("Слот для карточек персонажей").classes(
-                "text-gray-400 q-mb-md"
-            )
-            ui.button("ЗАКРЫТЬ", on_click=char_dialog.close).props(
-                "color=negative flat"
-            )
+            
+            #Контейнер для карточек с прокруткой
+            with ui.scroll_area().classes("w-full h-72 q-mb-md"):
+                with ui.row().classes("w-full q-col-gutter-sm justify-center"):
+                    for char in characters:
+                        char_id = char.get("id")
+                        name = char.get("name")
+                        alias = char.get("alias")
+                        img_path = char["visual"]["resolved_image_path"]
+                        bio_data = char.get("bio", {})
+                        description = bio_data.get("description", "нет описания")
+                        age = bio_data.get("age", "")
+
+                        #Карточка одного персонажа
+                        with ui.card().classes("w-60 q-pa-sm items-center cursor-pointer") as card:
+                            ui.image(img_path).classes("w-full h-32 object-cover rounded-md")
+                            ui.label(name).classes("text-bold text-sm q-mt-xs text-center")
+                            ui.label(f"{alias} ").classes("text-italic text-xs text-grey-6 text-center")
+                            ui.label(f"Возраст: {age}").classes("text-xs text-grey-7 text-center q-mt-xs")
+                            ui.label(description).classes("text-xs text-grey-7 text-center q-mt-xs ellipsis-3-lines")
+
+                            checkbox = ui.checkbox("Выбрать").classes("q-mt-xs")
+
+                            #Логика выбора до 3
+                            def toggle_selection(c_id=char_id, cb=checkbox, c_card=card):
+                                if cb.value:
+                                    if len(selected_characters) >= 3:
+                                        ui.notify("Можно выбрать не более 3 персонажей", type="warning")
+                                        cb.value = False
+                                    else:
+                                        if c_id not in selected_characters:
+                                            selected_characters.append(c_id)
+                                            c_card.classes(add="bg-blue-50") #подсветка
+                                else:
+                                    if c_id in selected_characters:
+                                        selected_characters.remove(c_id)
+                                        c_card.classes(remove="bg-blue-50")
+                                print(f"Текущий выбор персонажей: {selected_characters}")
+                            
+                            checkbox.on_value_change(toggle_selection)
+            ui.button("ГОТОВО", on_click=char_dialog.close).props("color=primary").classes("w-full")
+            #ui.label("Слот для карточек персонажей").classes(
+            #    "text-gray-400 q-mb-md"
+            #)
+            #ui.button("ЗАКРЫТЬ", on_click=char_dialog.close).props(
+            #    "color=negative flat"
+            #)
 
         #формирование опции диалогового окна внутри страницы для историй
         with ui.dialog() as stories_dialog, ui.card().classes("w-full max-w-lg"):
