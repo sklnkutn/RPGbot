@@ -131,8 +131,19 @@ def setup_routes(): #Регистрация декораторов модуле�
                     "Выбор истории", icon="auto_stories", on_click=adv_dialog.open
                     ).classes("col")
             
+            # Функция обработки клика старта
+            def start_adventure():
+                #Планируемая фиксация модели и статуса сессии
+                ui.navigate.to('/adventure')
+
             #Главная кнопка старта
-            ui.button("НАЧАТЬ ИСТОРИЮ", icon="play_arrow").props(
+            ui.button("НАЧАТЬ ИСТОРИЮ", icon="play_arrow", on_click=start_adventure).props(
                 "color=green size=lg"
             ).classes("w-full font-bold")
+    
+#Страница ведения истории
+@ui.page("/adventure")
+def adventure_page():
+    ui.label('привет мир').classes('text-3xl font-bold text-green-600 mb-4')
+    ui.button("НАЗАД НА ГЛАВНУЮ", on_click=lambda: ui.navigate.to('/')).props("color=grey").classes("mt-4")
         

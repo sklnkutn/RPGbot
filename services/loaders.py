@@ -21,7 +21,6 @@ def load_characters():
                 if data:
                     #логика проверки существующего изображение или замена моксом
                     img_path = data.get("visual", {}).get("image_path", DEFAULT_CHAR_IMAGE)
-                    #if not Path(img_path).exists():
                     if not img_path or not Path(img_path).exists():
                         img_path = DEFAULT_CHAR_IMAGE
                     if "visual" not in data:

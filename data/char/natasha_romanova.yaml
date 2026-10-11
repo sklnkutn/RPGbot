@@ -30,6 +30,7 @@ initial_state:
     fear: 0
     jealousy: 0
   known_facts:
+    about_self: []
     about_player: []
     about_world: []
     about_others: []
