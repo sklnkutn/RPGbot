@@ -1,6 +1,7 @@
 from nicegui import ui
 from services.loaders import load_characters, load_adventures
 from services.utils import handle_selection_toggle
+from services.db import create_session
 
 def setup_routes(): #Регистрация декораторов модулей и тд
     """Регистрация всех страниц и маршрутов UI"""
@@ -95,9 +96,7 @@ def setup_routes(): #Регистрация декораторов модуле�
 
             #Выбор моделей LLM, ComfyUI(выпадающие списки)
             ui.label("Настройка генерации").classes("text-sm text-gray-500 q-mb-xs")
-            with ui.row().classes("w-full q-gutter-x-sm q-mb-md"): 
-                #ui.button("Модель LLM", icon="psychology").classes("col") 
-                
+            with ui.row().classes("w-full q-gutter-x-sm q-mb-md"):
                 ui.icon("psychology", size="sm").classes("text-gray-400")
                 llm_select = (
                     ui.select(
@@ -119,7 +118,6 @@ def setup_routes(): #Регистрация декораторов модуле�
                     .props("outlined dense")
                 )
                 ui.icon("image", size="sm").classes("text-gray-400")
-                #ui.button("Модель визуализации", icon="image").classes("col")
             
             #Настройки промпта генерации выпадающие списки
             ui.label("Настройки сюжета").classes("text-sm text-gray-500 q-mb-xs")
@@ -131,10 +129,34 @@ def setup_routes(): #Регистрация декораторов модуле�
                     "Выбор истории", icon="auto_stories", on_click=adv_dialog.open
                     ).classes("col")
             
-            # Функция обработки клика старта
-            def start_adventure():
-                #Планируемая фиксация модели и статуса сессии
-                ui.navigate.to('/adventure')
+            # Функция валидации и старта приключения с записью в бд
+            async def start_adventure():
+                if not selected_adventures:
+                    ui.notify("Пожалуйста, выберите сюжет истории", type="warning", position="top")
+                    return
+                if not selected_characters:
+                    ui.notify("Пожалуйста, выберите как минимум одного персонажа(до 3ех)", type="warning", position="top")
+                    return
+                
+                adventure_id = selected_adventures[0]
+                chosen_llm = llm_select.value
+                chosen_comfy = checkpoint_select.value
+
+                try:
+                    # 3. Создаем сессию в базе данных и получаем ее ID
+                    session_id = await create_session(
+                        adventure_id=adventure_id,
+                        llm_model=chosen_llm,
+                        comfy_model=chosen_comfy,
+                        character_ids=selected_characters
+                    )
+                    
+                    ui.notify(f"Сессия #{session_id} успешно создана!", type="positive", position="top")
+                    ui.navigate.to(f'/adventure?session_id={session_id}')
+
+                except Exception as e:
+                    ui.notify(f"Ошибка создания сессии: {e}", type="negative", position="top")
+                    print(f"DB Error: {e}")
 
             #Главная кнопка старта
             ui.button("НАЧАТЬ ИСТОРИЮ", icon="play_arrow", on_click=start_adventure).props(
@@ -143,7 +165,11 @@ def setup_routes(): #Регистрация декораторов модуле�
     
 #Страница ведения истории
 @ui.page("/adventure")
-def adventure_page():
-    ui.label('привет мир').classes('text-3xl font-bold text-green-600 mb-4')
-    ui.button("НАЗАД НА ГЛАВНУЮ", on_click=lambda: ui.navigate.to('/')).props("color=grey").classes("mt-4")
-        
+def adventure_page(session_id: int = None):
+    with ui.column().classes("w-full max-w-3xl mx-auto q-pa-lg items-center"): #NiceGUI автоматически парсит Query-параметры из URL
+        if session_id:
+            ui.label(f"Активная сессия ID: {session_id}").classes("text-sm text-gray-500 mb-2")
+        else:
+            ui.label("Внимание: Сессия не инициализирована").classes("text-sm text-red-500 mb-2")
+            
+        ui.button("НАЗАД НА ГЛАВНУЮ", on_click=lambda: ui.navigate.to('/')).props("color=grey").classes("mt-4")

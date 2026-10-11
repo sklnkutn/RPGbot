@@ -3,7 +3,7 @@ name: "Мэвис Дракула"
 alias: null
 
 visual:
-  base_prompt: "mavis dracula, hotel transylvania, 1girl, black lips, fangs, blue eyes, black hair, short hair, medium breasts"
+  base_prompt: "1girl, mavis dracula, hotel transylvania, black lips, fangs, blue eyes, black hair, short hair, small breasts"
   default_clothing: "striped clothes, vampire, black nails, nail polish, lipstick"
   image_path: "assets/img/char/mavis_dracula.jpg"
 

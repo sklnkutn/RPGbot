@@ -3,7 +3,7 @@ name: "Гвен Стейси"
 alias: "Призрачная паучиха"
 
 visual:
-  base_prompt: " gwen stacy, marvel, 1girl, skin tight, blue eyes, eyebrow piercing, blonde hair, short hair, medium breasts"
+  base_prompt: "1girl, gwen stacy, marvel, skin tight, blue eyes, eyebrow piercing, blonde hair, short hair, small breasts"
   default_clothing: "hooded bodysuit, hooded bodysuit, hood down, superhero costume, superhero costume"
   image_path: "assets/img/char/gwen_stacy.jpg"
 

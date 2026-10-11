@@ -3,8 +3,8 @@ name: "Наталья Романова"
 alias: "Черная вдова"
 
 visual:
-  base_prompt: "black widow, marvel, 1girl, lips, blue eyes, red hair, long hair, short hair, large breasts"
-  default_clothing: "cleavage, black bodysuit, bodysuit, belt"
+  base_prompt: "1girl, black widow, marvel, lips, blue eyes, red hair, long hair, short hair, medium breasts"
+  default_clothing: "cleavage, black bodysuit, belt"
   image_path: "assets/img/char/black_widow.jpg"
 
 bio:
