@@ -84,23 +84,29 @@ async def send_http_post(url: str, payload: dict, server: str = "ollama") -> dic
         timeout_seconds
     )
 
-async def get_comfy_models(model_type: str = "checkpoints") -> list | str:
-    """
-    Запрашивает список доступных моделей заданного типа из ComfyUI. Например: checkpoints, lora, vae и т.д.
-    """
-    # Формируем путь, например: /models/checkpoints
+async def get_comfy_models(model_type: str = "checkpoints", retry: bool = False, max_attempts: int = 10, delay: int = 5) -> list | str:
+    """ Запрашивает список доступных моделей заданного типа из ComfyUI. Если retry=True, выполняет попытки подключения в цикле с задержкой"""
     endpoint = f"models/{model_type}"
     url = get_server_url("comfy", endpoint)
-    # Используем наш быстрый GET-транспорт (с коротким таймаутом, т.к. это метаданные)
-    response = await send_http_get(url, server="comfy", timeout_seconds=5)
-    # Если сервер вернул ошибку (строку), просто передаем её дальше
-    if isinstance(response, str):
-        return response
-    # Если вернулся успешный JSON, извлекаем список моделей(в зависимости от версии ComfyUI структура может отличаться, обычно это список строк или словарь)
-    if isinstance(response, list):
-        return response
-    elif isinstance(response, dict):
-        # Иногда структура может быть в виде {"models": [...]} или ключей
-        return response.get("models", list(response.keys()))
+    
+    attempts = max_attempts if retry else 1
+    
+    for attempt in range(1, attempts + 1):
+        response = await send_http_get(url, server="comfy", timeout_seconds=5)
         
-    return []
+        # Если пришел успешный список
+        if isinstance(response, list):
+            return response
+        # Если пришел словарь с моделями
+        elif isinstance(response, dict):
+            return response.get("models", list(response.keys()))
+            
+        # Если вернулась строка с ошибкой (сервер еще не поднялся), 
+        # и у нас еще есть попытки — ждем и повторяем
+        if attempt < attempts:
+            await asyncio.sleep(delay)
+        else:
+            # Возвращаем результат последней неудачной попытки (текст ошибки)
+            return response
+            
+    return "модели не обнаружены"
