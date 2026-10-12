@@ -21,3 +21,11 @@ def handle_selection_toggle(item_id, checkbox, card, selected_list, max_limit, i
             card.classes(remove="bg-blue-50")
     
     print(f"Текущий выбор ({item_type_name}): {selected_list}")
+
+def validate_game_start(selected_adventures: list, selected_characters: list) -> str | None:
+    """Возвращает текст ошибки, если выбор невалиден, или None, если всё ок."""
+    if not selected_adventures:
+        return "Пожалуйста, выберите сюжет истории"
+    if not selected_characters:
+        return "Пожалуйста, выберите как минимум одного персонажа (до 3-х)"
+    return None
