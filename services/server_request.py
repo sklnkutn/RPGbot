@@ -84,29 +84,49 @@ async def send_http_post(url: str, payload: dict, server: str = "ollama") -> dic
         timeout_seconds
     )
 
-async def get_comfy_models(model_type: str = "checkpoints", retry: bool = False, max_attempts: int = 10, delay: int = 5) -> list | str:
-    """ Запрашивает список доступных моделей заданного типа из ComfyUI. Если retry=True, выполняет попытки подключения в цикле с задержкой"""
-    endpoint = f"models/{model_type}"
-    url = get_server_url("comfy", endpoint)
-    
+async def _fetch_models_with_retry(url: str, server: str, parse_func, retry: bool, max_attempts: int, delay: int) -> list | str:
+    """Общий хелпер для выполнения запроса с ретраями и разбором ответа."""
     attempts = max_attempts if retry else 1
     
     for attempt in range(1, attempts + 1):
-        response = await send_http_get(url, server="comfy", timeout_seconds=5)
+        response = await send_http_get(url, server=server, timeout_seconds=5)
         
-        # Если пришел успешный список
-        if isinstance(response, list):
-            return response
-        # Если пришел словарь с моделями
-        elif isinstance(response, dict):
-            return response.get("models", list(response.keys()))
-            
-        # Если вернулась строка с ошибкой (сервер еще не поднялся), 
-        # и у нас еще есть попытки — ждем и повторяем
+        # Если пришел успешный ответ (не строка с ошибкой)
+        if not isinstance(response, str):
+            parsed_result = parse_func(response)
+            if parsed_result is not None:
+                return parsed_result
+                
+        # Если это ошибка или распарсить не удалось, ждем и повторяем
         if attempt < attempts:
             await asyncio.sleep(delay)
         else:
-            # Возвращаем результат последней неудачной попытки (текст ошибки)
-            return response
+            # Возвращаем текст последней ошибки, если пришла строка, иначе дефолт
+            return response if isinstance(response, str) else "модели не обнаружены"
             
     return "модели не обнаружены"
+
+async def get_comfy_models(model_type: str = "checkpoints", retry: bool = False, max_attempts: int = 10, delay: int = 5) -> list | str:
+    """Запрашивает список доступных моделей из ComfyUI."""
+    url = get_server_url("comfy", f"models/{model_type}")
+    
+    def parse_comfy(response):
+        if isinstance(response, list):
+            return response
+        elif isinstance(response, dict):
+            return response.get("models", list(response.keys()))
+        return None
+
+    return await _fetch_models_with_retry(url, "comfy", parse_comfy, retry, max_attempts, delay)
+
+async def get_ollama_models(retry: bool = False, max_attempts: int = 10, delay: int = 5) -> list | str:
+    """Запрашивает список доступных локальных моделей из Ollama через /api/tags."""
+    url = get_server_url("ollama", "api/tags")
+    
+    def parse_ollama(response):
+        if isinstance(response, dict) and "models" in response:
+            models = [m.get("name") for m in response["models"] if m.get("name")]
+            return models if models else ["модели не обнаружены"]
+        return None
+
+    return await _fetch_models_with_retry(url, "ollama", parse_ollama, retry, max_attempts, delay)
