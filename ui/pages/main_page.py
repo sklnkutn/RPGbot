@@ -6,6 +6,7 @@ from ui.components.char_dialog import create_char_dialog
 from ui.components.adv_dialog import create_adv_dialog
 from ui.components.llm_settings import create_llm_settings
 from ui.components.diff_model_settings import create_diff_model_settings
+from engine.first_run import first_run
 
 def setup_main_page():
     """Регистрация основной страницы"""
@@ -50,13 +51,19 @@ def setup_main_page():
                     ui.notify(error_message, type="warning", position="top")
                     return
                 try:
+                    adventure_id=selected_adventures[0]
+                    
                     session_id = await create_session(
-                        adventure_id=selected_adventures[0],
+                        adventure_id=adventure_id,
                         llm_model=llm_select.value,
                         comfy_model=checkpoint_select.value,
                         character_ids=selected_characters
                     )
-                    
+                    await first_run(
+                        session_id=session_id, 
+                        adventure_id=adventure_id, 
+                        model_name=llm_select.value
+                    )
                     ui.notify(f"Сессия #{session_id} успешно создана!", type="positive", position="top")
                     ui.navigate.to(f'/adventure?session_id={session_id}')
                 except Exception as e:
