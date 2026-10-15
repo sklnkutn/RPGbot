@@ -5,3 +5,8 @@ class GameStates(str, Enum):
     IN_PROGRESS = "in_progress"  # Активная стадия сессии
     ON_HOLD = "on_hold"  # Сессия на паузе / приостановленна
     END = "end"  # сессия завершена
+
+class CharStates(str, Enum):
+    """состояние персонажа в повествовании"""
+    ACTIVE = "active"
+    INACTIVE = "inactive"

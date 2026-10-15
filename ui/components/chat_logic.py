@@ -1,6 +1,7 @@
 import asyncio
 from nicegui import ui
 from services.db import get_session_messages, save_message
+from engine.main_engine import process_player_turn
 
 async def render_messages(session_id: int, chat_container, chat_scroll):
     """Функция отрисовки сообщений"""
@@ -32,17 +33,17 @@ async def handle_send(session_id: int, user_input, chat_container, chat_scroll):
         ui.notify("Введите сообщение", type="negative", position="top")
         return
     
-    # Сохранение, отображение сообщения пользователя
-    await save_message(session_id, sender="user", text=text)
     user_input.value = ""
-    await render_messages(session_id, chat_container, chat_scroll)
-    chat_scroll.scroll_to(percent=1.0)
     
-    # Заглушка ответ ИИ
-    ai_response_text = f"Эхо от ИИ на ваше действие: «{text}». Мир вокруг начинает меняться..."
-    ai_image_path = "assets/img/fr_del/example.jpg"
-    
-    # Сохранение, отображение сообщения ИИ
-    await save_message(session_id, sender="assistant", text=ai_response_text, image_path=ai_image_path)
-    await render_messages(session_id, chat_container, chat_scroll)
-    chat_scroll.scroll_to(percent=1.0)
+    try:
+        ui.notify("Анализ хода...", type="info", position="top", timeout=1000)
+        
+        # Запускаем наш конвейер обработки хода
+        await process_player_turn(session_id=session_id, user_text=text)
+        
+        # Перерисовываем чат, подтягивая новые сообщения из БД
+        await render_messages(session_id, chat_container, chat_scroll)
+        
+    except Exception as e:
+        ui.notify(f"Ошибка: {e}", type="negative", position="top")
+        print(f"Chat Logic Error: {e}")

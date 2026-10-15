@@ -27,6 +27,7 @@ async def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id INTEGER NOT NULL,
                 character_id TEXT NOT NULL,
+                character_status TEXT NOT NULL DEFAULT 'inactive',
                 trust INTEGER DEFAULT 0,
                 respect INTEGER DEFAULT 0,
                 affection INTEGER DEFAULT 0,
@@ -135,3 +136,40 @@ async def get_session_characters_list(session_id: int) -> list[str]:
         """, (session_id,)) as cursor:
             rows = await cursor.fetchall()
             return [row["character_id"] for row in rows]
+
+async def get_active_session_characters(session_id: int) -> list[str]:
+    """Отбор активного персонажа из бд"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        # Обрати внимание: используем AND и передаем оба параметра в кортеже!
+        async with db.execute("""
+            SELECT character_id 
+            FROM session_characters 
+            WHERE session_id = ? AND character_status = ?
+        """, (session_id, "active")) as cursor:
+            rows = await cursor.fetchall()
+            return [row["character_id"] for row in rows]
+
+async def get_session_info(session_id: int) -> dict:
+    """Получает информацию о сессии (adventure_id, llm_model и т.д.)"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT adventure_id, llm_model, comfy_model, state 
+            FROM sessions 
+            WHERE id = ?
+        """, (session_id,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return {}
+
+async def update_character_status(session_id: int, character_id: str, status: str):
+    """Обновляет статус персонажа (например, 'active' или 'inactive') в сессии"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute("""
+            UPDATE session_characters 
+            SET character_status = ? 
+            WHERE session_id = ? AND character_id = ?
+        """, (status, session_id, character_id))
+        await db.commit()
