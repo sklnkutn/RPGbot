@@ -105,3 +105,33 @@ async def get_session_messages(session_id: int):
         """, (session_id,)) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
+
+def _get_last_messages(all_messages: list) -> tuple[str | None, str | None]:
+    """
+    Вспомогательная функция: последние два сообщения. Возвращает кортеж: (last_assistant_text, last_user_text)
+    """
+    last_assistant_msg = None
+    last_user_msg = None
+
+    # Проходим по истории с конца (в обратном порядке)
+    for msg in reversed(all_messages):
+        if msg["sender"] == "assistant" and not last_assistant_msg:
+            last_assistant_msg = msg["text"]
+        elif msg["sender"] == "user" and not last_user_msg:
+            last_user_msg = msg["text"]
+        
+        # Если нашли оба — прекращаем поиск для оптимизации
+        if last_assistant_msg and last_user_msg:
+            break
+            
+    return last_assistant_msg, last_user_msg
+
+async def get_session_characters_list(session_id: int) -> list[str]:
+    """Временная функция получения списка ID персонажей сессии"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT character_id FROM session_characters WHERE session_id = ?
+        """, (session_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [row["character_id"] for row in rows]

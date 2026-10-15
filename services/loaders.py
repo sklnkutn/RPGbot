@@ -114,3 +114,16 @@ def load_prompt(prompt_file: str) -> str:
 
     return data["Prompt"]
     
+def load_prompt_section(prompt_file: str, section_key: str) -> str:
+    """Загружает конкретную секцию промпта из YAML-файла."""
+    path = PROMPTS_DIR / prompt_file
+    if not path.is_file():
+        raise FileNotFoundError(f"Файл промпта не найден: {path}")
+
+    with path.open("r", encoding="utf-8") as file:
+        data = yaml.safe_load(file)
+
+    if not isinstance(data, dict) or section_key not in data:
+        raise ValueError(f"В файле {path.name} отсутствует ключ '{section_key}'")
+
+    return data[section_key]    
