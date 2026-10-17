@@ -1,4 +1,5 @@
 import aiosqlite
+import json
 from services.states import GameStates
 from services.loaders import load_characters
 
@@ -50,11 +51,27 @@ async def init_db():
                 sender TEXT NOT NULL,
                 text TEXT NOT NULL,
                 image_path TEXT,
+                is_summarized INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
             )
         """)
         await db.commit()
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS session_summaries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                chunk_order INTEGER NOT NULL,
+                start_message_id INTEGER NOT NULL,
+                end_message_id INTEGER NOT NULL,
+                summary_text TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
+            )
+        """)
+        
+        await db.commit()        
 
 async def create_session(adventure_id: str, llm_model: str, comfy_model: str, character_ids: list[str]) -> int:
     """Создание новой игровой сессии, привязка персонажей и возвращение ID сессии"""
@@ -173,3 +190,80 @@ async def update_character_status(session_id: int, character_id: str, status: st
             WHERE session_id = ? AND character_id = ?
         """, (status, session_id, character_id))
         await db.commit()
+
+async def get_recent_session_messages(session_id: int, limit: int = 10) -> list[dict]:
+    """Получает последние N сообщений сессии в хронологическом порядке."""
+    async with aiosqlite.connect(DB_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT sender, text 
+            FROM (
+                SELECT id, sender, text 
+                FROM messages 
+                WHERE session_id = ? 
+                ORDER BY id DESC 
+                LIMIT ?
+            )
+            ORDER BY id ASC
+        """, (session_id, limit)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def get_character_full_state(session_id: int, сharacter_id: str) -> dict:
+    """Получение переменных персонажа для запроса по ID-сессии"""    
+    async with aiosqlite.connect(DB_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT character_status, 
+                   trust, respect, affection, annoyance, fear, jealousy,
+                   about_player, about_world, about_others, about_self, 
+                   current_clothing
+            FROM session_characters 
+            WHERE session_id = ? AND character_id = ?
+        """, (session_id, character_id)) as cursor:
+            row = await cursor.fetchone()
+            
+            if not row:
+                return {}
+            
+            # Превращаем результат в обычный словарь
+            state = dict(row)
+            
+            # Безопасно десериализуем JSON-поля памяти и одежды из строк в списки/объекты Python
+            for field in ["about_player", "about_world", "about_others", "about_self", "current_clothing"]:
+                try:
+                    val = state.get(field)
+                    state[field] = json.loads(val) if val else []
+                except json.JSONDecodeError:
+                    state[field] = []
+            if not state.get("current_clothing"):
+                state["current_clothing"] = ""       
+            return state
+
+async def get_session_summaries(session_id: int) -> list[dict]:
+    """Получает все сохраненные саммари (архив сюжета) для сессии по порядку."""
+    async with aiosqlite.connect(DB_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT chunk_order, summary_text 
+            FROM session_summaries 
+            WHERE session_id = ? 
+            ORDER BY chunk_order ASC
+        """, (session_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def get_unsummarized_messages(session_id: int) -> list[dict]:
+    """Получает только те сообщения, которые еще не были упакованы в саммари (is_summarized = 0)."""
+    async with aiosqlite.connect(DB_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT id, sender, text 
+            FROM messages 
+            WHERE session_id = ? AND is_summarized = 0 
+            ORDER BY id ASC
+        """, (session_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+#update_character_clothing добавить функцию

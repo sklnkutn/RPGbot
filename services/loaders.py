@@ -50,6 +50,46 @@ def load_characters():
 
     return characters
 
+def load_character_data(char_id: str) -> dict: #дописать функцию загрузки параметров из YAML
+    """Загрузка полных данных конкретного персонажа из YAML-файла по его id"""
+    if not CHAR_DIR.exists():
+        return {}
+    
+    # Ищем среди всех файлов персонажей
+    for file_path in CHAR_DIR.glob("*.yaml"):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+                if data and data.get("id") == char_id:
+                    # Нормализуем путь к картинке на случай, если он запрашивается отдельно
+                    raw_img = data.get("visual", {}).get("image_path", DEFAULT_CHAR_IMAGE)
+                    resolved_img = _resolve_image_path(raw_img, DEFAULT_CHAR_IMAGE)
+                    
+                    if "visual" not in data:
+                        data["visual"] = {}
+                    data["visual"]["resolved_image_path"] = resolved_img
+                    
+                    # Извлекаем возраст и прозвище сделланными безопасными (если их нет — вернется None или текст по умолчанию)
+                    bio_data = data.get("bio", {})
+                    
+                    # Возвращаем обогащенный словарь с удобной структурой
+                    return {
+                        "id": data.get("id"),
+                        "name": data.get("name", "Безымянный"),
+                        "alias": data.get("alias"),  # Прозвище (может быть None)
+                        "age": bio_data.get("age", "не указан"),
+                        "gender": bio_data.get("gender", "не указан"),
+                        "visual": data.get("visual", {}),
+                        "bio": bio_data,
+                        "personality_traits": bio_data.get("personality_traits", []),
+                        "description": bio_data.get("description", "")
+                    }
+        except Exception as e:
+            print(f"Ошибка чтения файла персонажа {file_path}: {e}")
+            
+    # Если персонаж с таким ID не найден
+    print(f"[Loader Warning] Персонаж с id '{char_id}' не найден в директории {CHAR_DIR}.")
+    return {}
 # Сервис загрузки приключений
 def load_adventures():
     adventures = []
