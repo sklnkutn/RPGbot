@@ -1,64 +1,101 @@
+# debug/ui_debug.py
 from nicegui import ui
+from pathlib import Path
+import json
 
-# Глобальное состояние отладочного сервера (доступно для импорта)
 debug_state = {
-    "mode": "local"  # "local" (автономный мок) или "bridge" (облачный мост)
+    "mode": "local"  # "local" или "bridge"
 }
 
+# Очередь активных задач
+pending_tasks = []
+
 def setup_debug_page():
-    """Регистрация страниц отладочного интерфейса"""
-    
     @ui.page("/")
     def index():
         return ui.navigate.to("/debug")
 
     @ui.page("/debug")
     def debug_page():
-        
-        status_banner = ui.label().classes("text-sm font-mono q-mb-md text-center w-full")
-
-        def refresh_ui_state():
-            current_mode = debug_state["mode"]
-            if current_mode == "local":
-                status_banner.text = "🟢 Активный режим: Автономный мок (статические модели)"
-                status_banner.classes(replace="text-sm font-mono q-mb-md text-center w-full text-green-400")
-            else:
-                status_banner.text = "🔵 Активный режим: Облачный мост (файловый перехватчик outputs ↔ inputs)"
-                status_banner.classes(replace="text-sm font-mono q-mb-md text-center w-full text-blue-400")
-
-        with ui.column().classes("w-full max-w-2xl mx-auto q-pa-lg items-center justify-center h-screen"):
+        with ui.column().classes("w-full max-w-4xl mx-auto q-pa-lg"):
             
-            ui.label("🛠️ Панель отладки и режимов мока").classes("text-2xl font-bold q-mb-xs text-white")
-            ui.label("Управление поведением заглушек движка").classes("text-xs text-gray-400 q-mb-lg")
+            ui.label("🛠️ Панель управления отладкой и мок-серверами").classes("text-2xl font-bold text-white")
             
-            refresh_ui_state()
+            # Статус-баннер
+            status_banner = ui.label().classes("text-sm font-mono q-my-sm")
+            
+            def update_status():
+                if debug_state["mode"] == "local":
+                    status_banner.text = "🟢 Режим: АВТОНОМНЫЙ МОК (Умная генерация JSON/текста на лету)"
+                    status_banner.classes(replace="text-sm font-mono text-green-400")
+                else:
+                    status_banner.text = "🔵 Режим: ОБЛАЧНЫЙ МОСТ (Ожидание ответов в debug/input/)"
+                    status_banner.classes(replace="text-sm font-mono text-blue-400")
 
-            with ui.row().classes("w-full q-col-gutter-md q-mb-lg"):
-                
-                # Карточка 1: Локальный мок
-                with ui.card().classes("col cursor-pointer p-6 items-center bg-grey-9 hover:bg-grey-8 transition border border-gray-700") as card_local:
-                    ui.icon("settings_ethernet", size="md").classes("text-green-400 q-mb-sm")
-                    ui.label("1. Автономный мок").classes("font-bold text-white text-base q-mb-xs")
-                    ui.label("Отвечает заготовленными списками моделей. Подходит для верстки и логики UI.").classes("text-xs text-gray-400 text-center")
-                    
-                    def set_local_mode():
-                        debug_state["mode"] = "local"
-                        refresh_ui_state()
-                        ui.notify("Включен режим: Автономный мок", type="positive", position="top")
+            update_status()
 
-                    card_local.on("click", set_local_mode)
+            # Переключатели режимов
+            with ui.row().classes("w-full q-gutter-md q-my-md"):
+                def set_local():
+                    debug_state["mode"] = "local"
+                    update_status()
+                    ui.notify("Режим изменен: Автономный мок", type="positive")
 
-                # Карточка 2: Облачный мост
-                with ui.card().classes("col cursor-pointer p-6 items-center bg-grey-9 hover:bg-grey-8 transition border border-gray-700") as card_bridge:
-                    ui.icon("sync_alt", size="md").classes("text-blue-400 q-mb-sm")
-                    ui.label("2. Облачный мост").classes("font-bold text-white text-base q-mb-xs")
-                    ui.label("Перенаправляет запросы через папки outputs/ и inputs/ для работы с Colab/Kaggle.").classes("text-xs text-gray-400 text-center")
-                    
-                    def set_bridge_mode():
-                        debug_state["mode"] = "bridge"
-                        refresh_ui_state()
-                        ui.notify("Включен режим: Облачный мост", type="info", position="top")
+                def set_bridge():
+                    debug_state["mode"] = "bridge"
+                    update_status()
+                    ui.notify("Режим изменен: Облачный мост", type="info")
 
-                    card_bridge.on("click", set_bridge_mode)
+                ui.button("Автономный умный мок", icon="bolt", on_click=set_local).props("color=green outline")
+                ui.button("Облачный мост (Outputs ↔ Inputs)", icon="sync_alt", on_click=set_bridge).props("color=blue outline")
 
-            ui.separator().classes("w-full q-my-md bg-gray-8")
+            ui.separator().classes("q-my-md")
+
+            # Секция Очереди задач (Live Tasks)
+            ui.label("📋 Очередь перехваченных запросов (Bridge Tasks)").classes("text-lg font-bold text-gray-300")
+            ui.label("В режиме моста положите файл с ответом в debug/input/<имя_файла> или вставьте JSON ниже:").classes("text-xs text-gray-400")
+
+            tasks_container = ui.column().classes("w-full q-mt-sm")
+
+            def refresh_tasks():
+                tasks_container.clear()
+                if not pending_tasks:
+                    with tasks_container:
+                        ui.label("Запросов пока нет. Запустите ход в боте.").classes("text-xs text-gray-500 italic")
+                    return
+
+                # Показываем последние 10 задач
+                for task in reversed(pending_tasks[-10:]):
+                    with tasks_container:
+                        card_color = "bg-grey-9" if task["status"] != "waiting" else "bg-blue-950 border border-blue-500"
+                        with ui.card().classes(f"w-full q-pa-sm {card_color} text-white"):
+                            with ui.row().classes("w-full justify-between items-center"):
+                                with ui.row().classes("items-center q-gutter-x-sm"):
+                                    badge_color = "green" if task["status"] == "completed" or task["status"] == "auto_mocked" else "orange"
+                                    ui.badge(task["status"], color=badge_color)
+                                    ui.label(task["id"]).classes("font-mono text-xs font-bold")
+                                ui.label(task["endpoint"]).classes("text-xs text-gray-400")
+                            
+                            ui.label(f"Превью: {task.get('preview', '')}").classes("text-[11px] text-gray-300 truncate w-full")
+
+                            # Если задача ждет ответа — даем кнопку быстрой вставки JSON прямо из браузера!
+                            if task["status"] == "waiting":
+                                with ui.expansion("Вставить ответ вручную (Quick Inject)", icon="edit").classes("w-full text-xs text-blue-300"):
+                                    resp_input = ui.textarea(placeholder='{"message": {"content": "Ответ модели..."}}').props("outlined dense rows=3 dark").classes("w-full")
+                                    
+                                    def make_submit_handler(filename, inp):
+                                        def submit():
+                                            try:
+                                                parsed = json.loads(inp.value)
+                                                target = Path("debug/input") / filename
+                                                with open(target, "w", encoding="utf-8") as f:
+                                                    json.dump(parsed, f, ensure_ascii=False, indent=2)
+                                                ui.notify(f"Ответ сохранен в {filename}!", type="positive")
+                                            except Exception as ex:
+                                                ui.notify(f"Ошибка JSON: {ex}", type="negative")
+                                        return submit
+
+                                    ui.button("Отправить в движок", icon="send", on_click=make_submit_handler(task["id"], resp_input)).props("size=sm color=primary")
+
+            # Таймер автообновления списка задач каждые 2 секунды
+            ui.timer(2.0, refresh_tasks)

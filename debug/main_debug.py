@@ -1,98 +1,169 @@
+# debug/main_debug.py
 import os
+import json
+import asyncio
+from pathlib import Path
 from dotenv import load_dotenv
 from aiohttp import web
 from nicegui import app, ui
-from ui_debug import setup_debug_page, debug_state
-from mode_local import get_local_ollama_models, get_local_comfy_models
+
+from ui_debug import setup_debug_page, debug_state, pending_tasks
+from mode_local import (
+    get_local_ollama_models, 
+    get_local_comfy_models, 
+    generate_smart_ollama_response
+)
 from save_request_json import save_request_json
 
 load_dotenv()
-DEBUG_PORT = int(os.getenv("DEBUG_PORT", 8086))
+DEBUG_PORT = int(os.getenv("DEBUG_PORT", 8189))
+INPUT_DIR = Path("debug/input")
+INPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Инициализируем UI страниц отладки
-setup_debug_page()
+# --- ВСПОМОГАТЕЛЬНЫЙ МЕХАНИЗМ МОСТА (BRIDGE WAITER) ---
 
-# --- ОБРАБОТЧИКИ МОК-СЕРВЕРОВ ---
+async def wait_for_input_response(filename: str, task_info: dict, timeout_seconds: int = 600) -> dict:
+    """
+    Ожидает появления файла с таким же именем в папке debug/input/.
+    После обнаружения считывает его, удаляет из input/ и возвращает спарсенный JSON.
+    """
+    target_file = INPUT_DIR / filename
+    start_time = asyncio.get_event_loop().time()
+    task_info["status"] = "waiting"
+
+    print(f"[Bridge Mode] Ожидание файла ответа: {target_file}")
+
+    while (asyncio.get_event_loop().time() - start_time) < timeout_seconds:
+        if target_file.exists():
+            try:
+                # Даем файлу 100мс на случай, если операционная система еще завершает запись
+                await asyncio.sleep(0.1)
+                with open(target_file, "r", encoding="utf-8") as f:
+                    response_json = json.load(f)
+
+                task_info["status"] = "completed"
+                # Удаляем отработанный файл из input, чтобы не путать следующие запросы
+                try:
+                    target_file.unlink()
+                except Exception:
+                    pass
+
+                print(f"[Bridge Mode] Ответ получен и отправлен движку: {filename}")
+                return response_json
+            except Exception as e:
+                print(f"[Bridge Error] Ошибка чтения {target_file}: {e}")
+
+        await asyncio.sleep(1)
+
+    task_info["status"] = "timeout"
+    raise TimeoutError(f"Превышено время ожидания ответа в {target_file} ({timeout_seconds}с)")
+
+# --- ОБРАБОТЧИКИ OLLAMA (порт 11434) ---
 
 async def handle_ollama_tags(request: web.Request):
-    """Эндпоинт для Ollama (/api/tags)"""
-    print(f"[Mock Server] GET /api/tags (Ollama). Текущий режим: {debug_state['mode']}")
-    
-    if debug_state["mode"] == "local":
-        response_data = get_local_ollama_models()
-        return web.json_response(response_data)
-    else:
-        # Режим bridge (пока заглушка)
-        return web.json_response({"models": [{"name": "bridge-mode-model"}]})
+    return web.json_response(get_local_ollama_models())
 
 async def handle_ollama_chat(request: web.Request):
-    """Эндпоинт для чата Ollama (/api/chat)"""
     try:
-        # Парсим входящий JSON-пейлоад от вашего бэкенда
         payload = await request.json()
     except Exception:
-        payload = {"error": "Не удалось распарсить входящий JSON"}
+        payload = {"error": "Невалидный JSON"}
 
-    print(f"\n[Mock Server] POST /api/chat (Ollama). Режим: {debug_state['mode']}")
-    
-    # Сохраняем запрос через отдельную функцию
-    saved_path = save_request_json("api_chat", payload)
-    
+    # 1. Сохраняем запрос в debug/output/
+    saved_path_str = save_request_json("api_chat", payload)
+    filename = Path(saved_path_str).name
+
+    # Регистрируем задачу в глобальном списке
+    task_info = {
+        "id": filename,
+        "endpoint": "/api/chat",
+        "status": "received",
+        "preview": str(payload.get("messages", [{}])[-1].get("content", ""))[:80]
+    }
+    pending_tasks.append(task_info)
+
+    # 2. Локальный режим: умная заглушка
     if debug_state["mode"] == "local":
-        # Возвращаем фейковый ответ Гейммастера, имитирующий реальную структуру Ollama
-        mock_response = {
-            "model": payload.get("model", "llama3"),
-            "created_at": "2026-06-06T00:00:00.000Z",
-            "message": {
-                "role": "assistant",
-                "content": "Заглушка мокс, отключите локальный debug режим чтобы пользоваться приложением."
-            },
-            "done": True
-        }
-        return web.json_response(mock_response)
-    else:
-        # Режим bridge (если захотите переключать на внешний сервер)
-        return web.json_response({"message": {"role": "assistant", "content": "Bridge mode response"}})
+        task_info["status"] = "auto_mocked"
+        response_data = generate_smart_ollama_response(payload)
+        return web.json_response(response_data)
+
+    # 3. Режим моста: ждём файл из debug/input/<filename>
+    try:
+        response_data = await wait_for_input_response(filename, task_info)
+        return web.json_response(response_data)
+    except TimeoutError as te:
+        return web.json_response({"error": str(te)}, status=504)
+
+# --- ОБРАБОТЧИКИ COMFYUI (порт 8188) ---
 
 async def handle_comfy_models(request: web.Request):
-    """Эндпоинт для ComfyUI (/models/checkpoints)"""
-    print(f"[Mock Server] GET /models/checkpoints (ComfyUI). Текущий режим: {debug_state['mode']}")
-    
-    if debug_state["mode"] == "local":
-        response_data = get_local_comfy_models()
-        return web.json_response(response_data)
-    else:
-        # Режим bridge (пока заглушка)
-        return web.json_response(["bridge-mode-checkpoint.safetensors"])
+    return web.json_response(get_local_comfy_models())
+
+async def handle_comfy_prompt(request: web.Request):
+    """Прием очереди генерации изображения"""
+    payload = await request.json()
+    saved_path_str = save_request_json("comfy_prompt", payload)
+    filename = Path(saved_path_str).name
+
+    mock_prompt_id = f"mock_{filename.replace('.json', '')}"
+    return web.json_response({"prompt_id": mock_prompt_id, "number": 1})
+
+async def handle_comfy_history(request: web.Request):
+    """Проверка готовности картинки"""
+    prompt_id = request.match_info.get("prompt_id", "default")
+    # Возвращаем статус успеха и имя картинки
+    mock_history = {
+        prompt_id: {
+            "status": {"status_str": "success", "completed": True},
+            "outputs": {
+                "9": {
+                    "images": [{"filename": "in_prog.png", "subfolder": "", "type": "output"}]
+                }
+            }
+        }
+    }
+    return web.json_response(mock_history)
+
+async def handle_comfy_view(request: web.Request):
+    """Скачивание сгенерированного изображения"""
+    # Отдаем готовую заглушку из assets проекта
+    sample_img_path = Path("assets/img/adv/in_prog.png")
+    if sample_img_path.exists():
+        with open(sample_img_path, "rb") as f:
+            return web.Response(body=f.read(), content_type="image/png")
+    # Либо минимальный 1x1 прозрачный PNG
+    empty_png = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+    return web.Response(body=empty_png, content_type="image/png")
+
+# --- ЗАПУСК МОК-СЕРВЕРОВ ---
 
 @app.on_startup
 async def start_mock_servers():
-    """Запускает фоновые aiohttp серверы на портах Ollama (11434) и ComfyUI (8188)"""
-    
-    # 1. Сервер Ollama (порт 11434)
+    # 1. Сервер Ollama (11434)
     ollama_app = web.Application()
     ollama_app.router.add_get("/api/tags", handle_ollama_tags)
-    ollama_app.router.add_post("/api/chat", handle_ollama_chat)  # <--- Добавили эндпоинт чата
+    ollama_app.router.add_post("/api/chat", handle_ollama_chat)
     
     ollama_runner = web.AppRunner(ollama_app)
     await ollama_runner.setup()
-    ollama_site = web.TCPSite(ollama_runner, "localhost", 11434)
-    await ollama_site.start()
+    await web.TCPSite(ollama_runner, "localhost", 11434).start()
     print("=== [Mock Server] Запущен на порту 11434 (Ollama) ===")
 
-    # 2. Сервер ComfyUI (порт 8188)
+    # 2. Сервер ComfyUI (8188)
     comfy_app = web.Application()
     comfy_app.router.add_get("/models/checkpoints", handle_comfy_models)
+    comfy_app.router.add_post("/prompt", handle_comfy_prompt)
+    comfy_app.router.add_get("/history/{prompt_id}", handle_comfy_history)
+    comfy_app.router.add_get("/view", handle_comfy_view)
+    
     comfy_runner = web.AppRunner(comfy_app)
     await comfy_runner.setup()
-    comfy_site = web.TCPSite(comfy_runner, "localhost", 8188)
-    await comfy_site.start()
+    await web.TCPSite(comfy_runner, "localhost", 8188).start()
     print("=== [Mock Server] Запущен на порту 8188 (ComfyUI) ===")
 
+# Инициализируем UI
+setup_debug_page()
+
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(
-        title="RPG Bot Debug Panel",
-        port=DEBUG_PORT,
-        reload=True,
-        dark=True
-    )
+    ui.run(title="RPG Bot Debug Panel", port=DEBUG_PORT, reload=True, dark=True)
