@@ -2,6 +2,7 @@ import os
 import aiohttp
 import asyncio
 from dotenv import load_dotenv
+from services.logger import logger
 
 load_dotenv()  # Загрузка переменных окружения из файла .env
 
@@ -36,12 +37,17 @@ def _get_timeout_for_server(server: str) -> int:
 async def _safe_request_wrapper(request_coro, server: str, timeout_seconds: int):
     """Единообразная обработка сетевых ошибок и таймаутов."""
     try:
-        return await request_coro
+        res = await request_coro
+        logger.debug(f"[Network] Запрос к '{server}' успешно выполнен.")
+        return res
     except aiohttp.ClientConnectorError:
+        logger.error(f"[Network Error] Ошибка подключения к '{server}'")
         return f"Ошибка подключения к сервису '{server}'. Проверьте, запущен ли локальный сервер." 
     except asyncio.TimeoutError:
-        return f"Превышено время ожидания ответа от '{server}' (таймаут {timeout_seconds}с)."
+        logger.warning(f"[Network Timeout] Превышено время ожидания ответа от '{server}'")
+        return f"Превышено время ожидания ответа от '{server}'"
     except Exception as e:
+        logger.warning(f"[Network Timeout] Превышено время ожидания ответа от '{server}'")
         return f"Произошла непредвиденная ошибка при запросе к '{server}': {e}"
 
 async def _execute_get(url: str, client_timeout: aiohttp.ClientTimeout, server: str):

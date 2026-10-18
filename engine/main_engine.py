@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from services.logger import logger, state_logger
 from services.db import save_message, get_session_info, get_active_session_characters, get_unsummarized_messages
 from engine.first_assistant_ask import first_assistant_ask
 from engine.second_assistant_ask import second_assistant_ask
@@ -23,6 +24,10 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
     7. Сохранение ответа истории в БД.
     8. Проверка буфера и архивация/суммаризация памяти (Шаг 5).
     """
+    # Префикс для всех логов текущей функции
+    ctx = f"[Session #{session_id}]"
+    logger.info(f"{ctx} === Старт обработки хода игрока ===")
+
     # 1. Получаем параметры сессии
     session_info = await get_session_info(session_id)
     adventure_id = session_info.get("adventure_id")
@@ -34,7 +39,7 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
         active_chars = await get_active_session_characters(session_id)
         
         if not active_chars:
-            print("[Pipeline] Активных спутников нет на сцене. Запуск Шага 1 (Анализ входа)...")
+            logger.info(f"{ctx} [Шаг 1] Активных спутников нет. Запуск анализа входа...")
             await first_assistant_ask(
                 session_id=session_id,
                 adventure_id=adventure_id,
@@ -44,7 +49,7 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
             # Перепроверяем: вдруг Шаг 1 только что активировал персонажа
             active_chars = await get_active_session_characters(session_id)
         else:
-            print(f"[Pipeline] Спутник '{active_chars[0]}' уже на сцене. Шаг 1 пропущен.")
+            logger.info(f"{ctx} [Шаг 1] Спутник '{active_chars[0]}' на сцене. Пропуск активации.")
 
         active_char_id = active_chars[0] if active_chars else None
 
@@ -57,7 +62,7 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
         )
 
         # 4. Шаг 2: Нарратор развивает события и реплики
-        print("[Pipeline] Запуск Шага 2 (Генерация нарратива)...")
+        logger.info(f"{ctx} [Шаг 2] Генерация нарратива...")
         narrator_text = await second_assistant_ask(
             session_id=session_id,
             adventure_id=adventure_id,
@@ -66,7 +71,7 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
         )
 
         # 5. Шаг 3: Визуальный ассистент переводит сцену в промпт для диффузии
-        print("[Pipeline] Запуск Шага 3 (Создание visual prompt)...")
+        logger.info(f"{ctx} [Шаг 3] Создание визуального промпта...")
         image_prompt = await third_assistant_ask(
             session_id=session_id,
             active_char_id=active_char_id,
@@ -76,7 +81,7 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
 
         # 6. Шаг 4: Оценка реакции спутника, сдвига отношений и одежды
         if active_char_id:
-            print(f"[Pipeline] Запуск Шага 4 (Оценка состояния '{active_char_id}')...")
+            logger.info(f"{ctx} [Шаг 4] Оценка состояния персонажа '{active_char_id}'...")
             await fourth_assistant_ask(
                 session_id=session_id,
                 active_char_id=active_char_id,
@@ -87,7 +92,7 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
 
         # 7. Генерация изображения через ComfyUI
         # Ollama закончила тяжелые фазы хода — безопасно отдаем VRAM под диффузию
-        print("[Pipeline] Запуск ComfyUI (Рендер изображения сцены)...")
+        logger.info(f"{ctx} [ComfyUI] Отправка в очередь рендера (модель: {comfy_model})...")
         image_path = await generate_comfy_image(
             session_id=session_id,
             comfy_model=comfy_model,
@@ -106,12 +111,12 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
         # 9. Шаг 5: Проверка лимита буфера и сжатие контекста
         unsummarized = await get_unsummarized_messages(session_id)
         if len(unsummarized) >= MAX_MESSAGE_COUNT_BEFORE_SUMM:
-            print(f"[Pipeline] Буфер накопления полон ({len(unsummarized)} сообщений). Запуск Шага 5 (Суммаризация)...")
+            logger.info(f"{ctx} [Шаг 5] Накоплено {len(unsummarized)} сообщений. Запуск суммаризации...")
             await fifth_assistant_ask(session_id=session_id, model_name=llm_model)
 
         return narrator_text
 
     except Exception as e:
         error_msg = f"[Ошибка игрового конвейера]: {e}"
-        print(error_msg)
+        logger.error(f"{ctx} Ошибка в игровом конвейере: {e}", exc_info=True)
         raise RuntimeError(error_msg) from e

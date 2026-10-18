@@ -14,6 +14,9 @@ async def fourth_assistant_ask(session_id: int, active_char_id: str | None, narr
     Анализирует последствия сцены для активного персонажа:
     сдвиг отношений на шаг RELATION_STEP, проверка смены одежды и ухода со сцены.
     """
+    #ID для логгирования
+    ctx = f"[Session #{session_id}] [Char: {active_char_id}]"
+
     #Отработка ошибочного запроса
     if not active_char_id:
         return {}
@@ -81,7 +84,7 @@ async def fourth_assistant_ask(session_id: int, active_char_id: str | None, narr
     response = await send_http_post(url, payload, server="ollama")
     
     if isinstance(response, str):
-        print(f"[Fourth Step Error]: {response}")
+        logger.error(f"{ctx} Ошибка вызова Ollama на Шаге 4: {response}")
         return {}
     content = response.get("message", {}).get("content", "")
     #распарсить ответ
@@ -102,6 +105,9 @@ async def fourth_assistant_ask(session_id: int, active_char_id: str | None, narr
             leaves_scene=leaves_scene
         )
         return data
+    except json.JSONDecodeError:
+        logger.warning(f"{ctx} Невалидный JSON от оценщика: {content}")
+        return {}
     except Exception as e:
-        print(f"[Fourth Step Warning] Ошибка применения изменений состояния: {e}")
+        logger.error(f"{ctx} Ошибка применения изменений состояния: {e}", exc_info=True)
         return {}

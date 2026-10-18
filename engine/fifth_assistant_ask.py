@@ -1,6 +1,7 @@
 import os
 import json
 from dotenv import load_dotenv
+from services.logger import logger
 from services.loaders import load_character_data, load_prompt
 from services.server_request import get_server_url, send_http_post
 from services.db import get_chunk_for_summarization, mark_messages_as_summarized, save_session_summary_chunk, append_character_memories
@@ -14,6 +15,10 @@ async def fifth_assistant_ask(session_id: int, model_name: str):
     Пятый шаг: сжатие старого буфера сообщений, извлечение долговременной памяти
     персонажей и запись архивного фрагмента сюжета.
     """
+    #ID логгирования
+    ctx = f"[Session #{session_id}] [Fifth Step]"
+    logger.info(f"{ctx} Запуск сжатия буфера и извлечения памяти...")
+
     # Размер сжимаемого чанка — это дельта между максимумом и минимумом
     chunk_size = MAX_MESSAGE_COUNT_BEFORE_SUMM - MIN_MESSAGE_COUNT
     if chunk_size <= 0:
@@ -23,6 +28,7 @@ async def fifth_assistant_ask(session_id: int, model_name: str):
     chunk_messages = await get_chunk_for_summarization(session_id, chunk_size=chunk_size)
     if not chunk_messages:
         return
+    logger.debug(f"{ctx} Размер сжимаемого буфера: {len(chunk_messages)} сообщений.")
 
     # Собираем сырой текст диалога для передачи модели
     formatted_dialogue = "\n".join([
@@ -73,10 +79,11 @@ async def fifth_assistant_ask(session_id: int, model_name: str):
             if not isinstance(res, str):
                 try:
                     facts = json.loads(res.get("message", {}).get("content", "{}"))
+                    logger.info(f"{ctx} Персонаж '{char_id}' обновил память: извлечено фактов (player: {len(facts.get('about_player', []))}, world: {len(facts.get('about_world', []))})")
                     # Сохраняем новые факты в память персонажа
                     await append_character_memories(session_id, char_id, facts)
                 except Exception as e:
-                    print(f"[Fifth Step Warning] Ошибка парсинга фактов для {char_id}: {e}")
+                    logger.error(f"{ctx} Ошибка парсинга или сохранения фактов для {char_id}: {e}", exc_info=True)
 
     # 4. ФАЗА Б: Литературная суммаризация событий чанка в общую хронику (session_summaries)
     summary_prompt_template = load_prompt("chunk_summary_prompt.yaml")
@@ -97,13 +104,13 @@ async def fifth_assistant_ask(session_id: int, model_name: str):
     sum_res = await send_http_post(url, summary_payload, server="ollama")
     
     if isinstance(sum_res, str):
-        print(f"[Fifth Step Error] Ошибка сети при суммаризации сессии {session_id}: {sum_res}")
+        logger.error(f"{ctx} Ошибка сети при суммаризации: {sum_res}")
         return
     
     summary_text = sum_res.get("message", {}).get("content", "").strip()
 
     if not summary_text:
-        print(f"[Fifth Step Warning] Модель вернула пустое резюме для сессии {session_id}. Пропускаем сохранение.")
+        logger.warning(f"{ctx} Модель вернула пустое резюме. Пропускаем сохранение.")
         return
         
     # 5. Записываем архивный чанк в базу данных
@@ -111,6 +118,10 @@ async def fifth_assistant_ask(session_id: int, model_name: str):
     end_id = chunk_messages[-1]["id"]
     await save_session_summary_chunk(session_id, start_id, end_id, summary_text)
 
+    logger.info(f"{ctx} Успешно создано и сохранено архивное резюме для сообщений ID {start_id}-{end_id}.")
+
     # 6. Помечаем эти сообщения как сжатые (is_summarized = 1)
     message_ids = [m["id"] for m in chunk_messages]
     await mark_messages_as_summarized(message_ids)
+
+    logger.debug(f"{ctx} Помечено как сжатое сообщений: {len(message_ids)}")
