@@ -1,5 +1,8 @@
 import os
 import yaml
+import json
+import aiohttp
+from services.server_request import get_server_url
 from pathlib import Path
 
 #Установка директорий
@@ -8,6 +11,7 @@ ADV_DIR = Path("data/adv")
 PROMPTS_DIR = Path("data/prompts")
 DEFAULT_CHAR_IMAGE = "assets/img/char/in_prog.png"
 DEFAULT_ADV_IMAGE = "assets/img/adv/in_prog.png"
+WORKFLOW_PATH = Path("data/comfy_workflow/bot_workflow.json")
 
 
 def _resolve_image_path(raw_path: str, default_path: str) -> str:
@@ -166,4 +170,35 @@ def load_prompt_section(prompt_file: str, section_key: str) -> str:
     if not isinstance(data, dict) or section_key not in data:
         raise ValueError(f"В файле {path.name} отсутствует ключ '{section_key}'")
 
-    return data[section_key]    
+    return data[section_key] 
+
+def _load_workflow_template() -> dict:
+    """Загружает шаблон рабочего процесса ComfyUI из файла."""
+    if not WORKFLOW_PATH.exists():
+        raise FileNotFoundError(f"Файл workflow не найден: {WORKFLOW_PATH}")
+    with open(WORKFLOW_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+async def _download_comfy_image(filename: str, subfolder: str, folder_type: str, target_path: Path) -> bool:
+    """Скачивает сгенерированное изображение из ComfyUI /view и сохраняет локально."""
+    base_url = get_server_url("comfy", "view")
+    params = {
+        "filename": filename,
+        "subfolder": subfolder,
+        "type": folder_type
+    }
+    try:
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(base_url, params=params) as resp:
+                if resp.status == 200:
+                    image_bytes = await resp.read()
+                    with open(target_path, "wb") as f:
+                        f.write(image_bytes)
+                    return True
+                else:
+                    print(f"[ComfyUI Download Error]: статус {resp.status}")
+                    return False
+    except Exception as e:
+        print(f"[ComfyUI Download Error]: {e}")
+        return False

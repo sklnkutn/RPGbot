@@ -55,7 +55,7 @@ async def second_assistant_ask(session_id: int, adventure_id: str, active_char_i
             knowledge_section = "- Известные персонажу факты: пока нет накопленных знаний."
 
         char_context = (
-            f"\n\n# Активный спутник на сцене:\n"
+            f"\n\n# Активный персонаж на сцене:\n"
             f"- Имя: {char_yaml.get('name')} ({char_yaml.get('alias', '')})\n"
             f"- Пол: {char_yaml.get('gender')}\n"
             f"- Возраст: {char_yaml.get('age')}\n"
