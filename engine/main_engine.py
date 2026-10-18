@@ -1,13 +1,15 @@
 import os
 from dotenv import load_dotenv
+from services.states import GameStates
 from services.logger import logger, state_logger
-from services.db import save_message, get_session_info, get_active_session_characters, get_unsummarized_messages
+from services.db import commit_player_turn, get_session_info, get_active_session_characters, get_unsummarized_messages
 from engine.first_assistant_ask import first_assistant_ask
 from engine.second_assistant_ask import second_assistant_ask
 from engine.third_assistant_ask import third_assistant_ask
 from engine.fourth_assistant_ask import fourth_assistant_ask
 from engine.fifth_assistant_ask import fifth_assistant_ask
 from engine.comfy_ask import generate_comfy_image
+from engine.comfy_ask import delete_generated_image
 
 load_dotenv()
 MAX_MESSAGE_COUNT_BEFORE_SUMM = int(os.getenv("MAX_MESSAGE_COUNT_BEFORE_SUMM", 20))
@@ -30,6 +32,14 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
 
     # 1. Получаем параметры сессии
     session_info = await get_session_info(session_id)
+    if not session_info:
+        logger.info(f"{ctx} Сессия #{session_id} не найдена)...")
+        raise ValueError(f"Сессия #{session_id} не найдена")
+
+    if session_info["state"] != GameStates.IN_PROGRESS.value:
+        logger.info(f"{ctx} Сессия #{session_id} не активна)...")
+        raise ValueError(f"Сессия #{session_id} не активна")
+
     adventure_id = session_info.get("adventure_id")
     llm_model = session_info.get("llm_model")
     comfy_model = session_info.get("comfy_model")
@@ -40,26 +50,15 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
         
         if not active_chars:
             logger.info(f"{ctx} [Шаг 1] Активных спутников нет. Запуск анализа входа...")
-            await first_assistant_ask(
+            active_char_id = await first_assistant_ask(
                 session_id=session_id,
                 adventure_id=adventure_id,
                 user_text=user_text,
                 model_name=llm_model
             )
-            # Перепроверяем: вдруг Шаг 1 только что активировал персонажа
-            active_chars = await get_active_session_characters(session_id)
         else:
             logger.info(f"{ctx} [Шаг 1] Спутник '{active_chars[0]}' на сцене. Пропуск активации.")
-
-        active_char_id = active_chars[0] if active_chars else None
-
-        # 3. Фиксируем действие игрока в БД, привязав его к текущему спутнику
-        await save_message(
-            session_id=session_id,
-            sender="user",
-            text=user_text,
-            character_id=active_char_id
-        )
+            active_char_id = active_chars[0]
 
         # 4. Шаг 2: Нарратор развивает события и реплики
         logger.info(f"{ctx} [Шаг 2] Генерация нарратива...")
@@ -67,7 +66,8 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
             session_id=session_id,
             adventure_id=adventure_id,
             active_char_id=active_char_id,
-            model_name=llm_model
+            model_name=llm_model,
+            user_text=user_text,
         )
 
         # 5. Шаг 3: Визуальный ассистент переводит сцену в промпт для диффузии
@@ -80,9 +80,10 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
         )
 
         # 6. Шаг 4: Оценка реакции спутника, сдвига отношений и одежды
+        character_state = None
         if active_char_id:
             logger.info(f"{ctx} [Шаг 4] Оценка состояния персонажа '{active_char_id}'...")
-            await fourth_assistant_ask(
+            character_state = await fourth_assistant_ask(
                 session_id=session_id,
                 active_char_id=active_char_id,
                 narrator_text=narrator_text,
@@ -98,21 +99,33 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
             comfy_model=comfy_model,
             positive_prompt=image_prompt
         )
+        if not image_path:
+            raise RuntimeError("ComfyUI не смог сгенерировать или сохранить изображение. Ход не записан.")
 
-        # 8. Сохраняем финальный ответ сцены в историю сообщений
-        await save_message(
-            session_id=session_id,
-            sender="assistant",
-            text=narrator_text,
-            image_path=image_path,
-            character_id=active_char_id
-        )
+        try:
+            await commit_player_turn(
+                session_id=session_id,
+                user_text=user_text,
+                narrator_text=narrator_text,
+                image_path=image_path,
+                character_id=active_char_id,
+                character_state=character_state,
+            )
+        except BaseException:
+            try:
+                await delete_generated_image(image_path)
+            except Exception:
+                logger.exception(f"{ctx} Не удалось удалить изображение незаписанного хода")
+            raise
 
-        # 9. Шаг 5: Проверка лимита буфера и сжатие контекста
-        unsummarized = await get_unsummarized_messages(session_id)
-        if len(unsummarized) >= MAX_MESSAGE_COUNT_BEFORE_SUMM:
-            logger.info(f"{ctx} [Шаг 5] Накоплено {len(unsummarized)} сообщений. Запуск суммаризации...")
-            await fifth_assistant_ask(session_id=session_id, model_name=llm_model)
+        # Архивация выполняется после фиксации хода и не меняет его статус для пользователя.
+        try:
+            unsummarized = await get_unsummarized_messages(session_id)
+            if len(unsummarized) >= MAX_MESSAGE_COUNT_BEFORE_SUMM:
+                logger.info(f"{ctx} [Шаг 5] Накоплено {len(unsummarized)} сообщений. Запуск суммаризации...")
+                await fifth_assistant_ask(session_id=session_id, model_name=llm_model)
+        except Exception:
+            logger.exception(f"{ctx} Ошибка суммаризации после успешного сохранения хода")
 
         return narrator_text
 

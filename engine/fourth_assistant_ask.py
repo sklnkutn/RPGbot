@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from services.logger import logger
 from services.loaders import load_character_data, load_prompt
 from services.server_request import get_server_url, send_http_post
-from services.db import get_character_full_state, update_character_turn_state
+from services.db import get_character_full_state
 
 #Значениие макс мин изменения переменной
 load_dotenv()
@@ -31,6 +31,7 @@ async def fourth_assistant_ask(session_id: int, active_char_id: str | None, narr
         f"- Характер: {', '.join(char_yaml.get('bio', {}).get('personality_traits', []))}\n"
         f"- Текущая одежда в базе: {char_db.get('current_clothing', 'не указана')}\n"
     )
+    system_prompt = f"{base_system_prompt}{char_info}"
 
     #сделать запрос
     #JSON Schema: дискретные сдвиги [-1, 0, 1], проверка одежды и ухода
@@ -86,29 +87,42 @@ async def fourth_assistant_ask(session_id: int, active_char_id: str | None, narr
     
     if isinstance(response, str):
         logger.error(f"{ctx} Ошибка вызова Ollama на Шаге 4: {response}")
-        return {}
+        raise RuntimeError(f"Ошибка вызова Ollama на шаге оценки состояния: {response}")
     content = response.get("message", {}).get("content", "")
-    #распарсить ответ
+
     try:
         data = json.loads(content)
-        shifts = data.get("relation_shifts", {})    
-    #Перевод дискретных шагов [-1, 0, 1] в реальные числовые дельты: delta = shift * RELATION_STEP
-        deltas = {stat: shifts.get(stat, 0) * RELATION_STEP for stat in shifts}
-        clothing_changed = data.get("clothing_changed", False)
-        new_clothing = data.get("new_clothing") if clothing_changed else None
-        leaves_scene = data.get("leaves_scene", False)
-    #Атомарно обновляем состояние персонажа в SQLite
-        await update_character_turn_state(
-            session_id=session_id,
-            character_id=active_char_id,
-            deltas=deltas,
-            new_clothing=new_clothing,
-            leaves_scene=leaves_scene
-        )
-        return data
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
         logger.warning(f"{ctx} Невалидный JSON от оценщика: {content}")
-        return {}
-    except Exception as e:
-        logger.error(f"{ctx} Ошибка применения изменений состояния: {e}", exc_info=True)
-        return {}
+        raise ValueError(f"Оценщик вернул невалидный JSON: {content}") from e
+
+    shifts = data.get("relation_shifts")
+    if not isinstance(shifts, dict):
+        raise ValueError("Оценщик не вернул объект relation_shifts")
+
+    stat_names = ("trust", "respect", "affection", "annoyance", "fear", "jealousy")
+    normalized_shifts = {}
+    for stat in stat_names:
+        value = shifts.get(stat)
+        if type(value) is not int or value not in (-1, 0, 1):
+            raise ValueError(f"Оценщик вернул недопустимое значение для {stat}: {value!r}")
+        normalized_shifts[stat] = value * RELATION_STEP
+
+    clothing_changed = data.get("clothing_changed")
+    leaves_scene = data.get("leaves_scene")
+    if not isinstance(clothing_changed, bool) or not isinstance(leaves_scene, bool):
+        raise ValueError("Оценщик вернул некорректные clothing_changed или leaves_scene")
+
+    new_clothing = data.get("new_clothing")
+    if clothing_changed:
+        if not isinstance(new_clothing, str) or not new_clothing.strip():
+            raise ValueError("Оценщик отметил смену одежды, но не вернул её описание")
+        new_clothing = new_clothing.strip()
+    else:
+        new_clothing = None
+
+    return {
+        "deltas": normalized_shifts,
+        "new_clothing": new_clothing,
+        "leaves_scene": leaves_scene,
+    }

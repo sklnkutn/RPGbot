@@ -5,7 +5,13 @@ from services.loaders import get_adventure_world_info, load_character_data, load
 from services.server_request import get_server_url, send_http_post
 from services.db import get_character_full_state, get_session_summaries, get_unsummarized_messages
 
-async def second_assistant_ask(session_id: int, adventure_id: str, active_char_id: str | None, model_name: str) -> str:
+async def second_assistant_ask(
+    session_id: int,
+    adventure_id: str,
+    active_char_id: str | None,
+    model_name: str,
+    user_text: str,
+) -> str:
     # 1. Загрузка параметров мира
     world_info = get_adventure_world_info(adventure_id)
     genres_str = ", ".join(world_info.get("genre", []))
@@ -102,6 +108,11 @@ async def second_assistant_ask(session_id: int, adventure_id: str, active_char_i
             "role": role,
             "content": msg["text"]
         })
+
+    formatted_messages.append({
+        "role": "user",
+        "content": user_text
+    })
 
     #формирование запроса
     payload = {

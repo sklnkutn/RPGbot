@@ -132,7 +132,7 @@ async def create_session(adventure_id: str, llm_model: str, comfy_model: str, ch
         await db.commit()
         return session_id
 
-async def save_message(session_id: int, sender: str, text: str, image_path: str = None, character_id: str | None):
+async def save_message(session_id: int, sender: str, text: str, image_path: str | None = None, character_id: str | None = None):
     """Сохранение сообщения в историю диалога с привязкой к активному персонажу"""
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("""
@@ -140,6 +140,84 @@ async def save_message(session_id: int, sender: str, text: str, image_path: str 
             VALUES (?, ?, ?, ?, ?)
         """, (session_id, sender, text, image_path, character_id))
         await db.commit()
+
+async def commit_player_turn(
+    session_id: int,
+    user_text: str,
+    narrator_text: str,
+    image_path: str,
+    character_id: str | None,
+    character_state: dict | None,
+) -> None:
+    """Атомарно сохраняет завершённый ход и применяет изменения персонажа."""
+    async with aiosqlite.connect(DB_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            await db.execute("BEGIN IMMEDIATE")
+
+            if character_id is not None:
+                if character_state is None:
+                    raise ValueError("Для активного персонажа не подготовлено состояние хода")
+
+                async with db.execute(
+                    """
+                    SELECT trust, respect, affection, annoyance, fear, jealousy, current_clothing
+                    FROM session_characters
+                    WHERE session_id = ? AND character_id = ?
+                    """,
+                    (session_id, character_id),
+                ) as cursor:
+                    character = await cursor.fetchone()
+
+                if character is None:
+                    raise ValueError(f"Персонаж {character_id!r} не состоит в сессии #{session_id}")
+
+                deltas = character_state["deltas"]
+
+                def clamp(stat: str) -> int:
+                    return max(-100, min(100, (character[stat] or 0) + deltas.get(stat, 0)))
+
+                clothing = character_state["new_clothing"] or character["current_clothing"]
+                status = "inactive" if character_state["leaves_scene"] else "active"
+                await db.execute(
+                    """
+                    UPDATE session_characters
+                    SET trust = ?, respect = ?, affection = ?, annoyance = ?, fear = ?, jealousy = ?,
+                        current_clothing = ?, character_status = ?
+                    WHERE session_id = ? AND character_id = ?
+                    """,
+                    (
+                        clamp("trust"),
+                        clamp("respect"),
+                        clamp("affection"),
+                        clamp("annoyance"),
+                        clamp("fear"),
+                        clamp("jealousy"),
+                        clothing,
+                        status,
+                        session_id,
+                        character_id,
+                    ),
+                )
+
+            await db.execute(
+                """
+                INSERT INTO messages (session_id, sender, text, character_id)
+                VALUES (?, 'user', ?, ?)
+                """,
+                (session_id, user_text, character_id),
+            )
+            await db.execute(
+                """
+                INSERT INTO messages (session_id, sender, text, image_path, character_id)
+                VALUES (?, 'assistant', ?, ?, ?)
+                """,
+                (session_id, narrator_text, image_path, character_id),
+            )
+            await db.commit()
+        except BaseException:
+            await db.rollback()
+            raise
 
 async def get_session_messages(session_id: int):
     """Получение всей истории сообщений для конкретной сессии"""

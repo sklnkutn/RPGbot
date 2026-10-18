@@ -8,6 +8,16 @@ from services.loaders import _load_workflow_template, _download_comfy_image
 
 OUTPUTS_DIR = Path("outputs")
 
+async def delete_generated_image(image_path: str) -> None:
+    """Удаляет изображение хода, если атомарное сохранение хода завершилось ошибкой."""
+    filename = Path(image_path).name
+    if not image_path.startswith("/outputs/") or not filename:
+        return
+
+    target_path = OUTPUTS_DIR / filename
+    if target_path.is_file():
+        await asyncio.to_thread(target_path.unlink)
+
 async def generate_comfy_image(session_id: int, comfy_model: str, positive_prompt: str, timeout_seconds: int = 120) -> str | None:
     """
     Модифицирует шаблон workflow, отправляет в ComfyUI, ожидает генерации,

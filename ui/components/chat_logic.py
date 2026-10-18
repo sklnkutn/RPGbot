@@ -1,7 +1,6 @@
 import asyncio
-import weakref
 from nicegui import ui
-from services.db import get_session_messages, save_message
+from services.db import get_session_messages
 from engine.main_engine import process_player_turn
 
 # Словарь для хранения блокировок по каждой сессии
@@ -43,8 +42,6 @@ async def handle_send(session_id: int, user_input, chat_container, chat_scroll, 
     if session_locks[session_id].locked():
         ui.notify("Подождите, предыдущий ход еще обрабатывается...", type="warning", position="top")
         return    
-    user_input.value = ""
-    
     user_input.disable()
     if send_button:
         send_button.disable()
@@ -58,8 +55,16 @@ async def handle_send(session_id: int, user_input, chat_container, chat_scroll, 
             # Запускаем наш конвейер обработки хода
             await process_player_turn(session_id=session_id, user_text=text)
         
+            user_input.value = ""
             # Перерисовываем чат, подтягивая новые сообщения из БД
-            await render_messages(session_id, chat_container, chat_scroll)
+            try:
+                await render_messages(session_id, chat_container, chat_scroll)
+            except Exception as e:
+                ui.notify(
+                    f"Ход завершён, но не удалось обновить историю: {e}. Перезагрузите страницу.",
+                    type="warning",
+                    position="top",
+                )
         
         except Exception as e:
             ui.notify(f"Ошибка: {e}", type="negative", position="top")

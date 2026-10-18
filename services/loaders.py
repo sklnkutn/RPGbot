@@ -19,24 +19,18 @@ WORKFLOW_PATH = ROOT_DIR / "data" / "comfy_workflow" / "bot_workflow.json"
 
 def _resolve_image_path(raw_path: str, default_path: str) -> str:
     """Проверяет существование файла и возвращает корректный веб-путь со слэшем."""
-    path_obj = Path(raw_path)
-    
-    # Если путь из YAML не существует на диске, используем дефолтный
-    if not raw_path or not path_obj.exists():
+    candidate = ROOT_DIR / raw_path if raw_path else default_path
+
+    if not candidate.is_file():
         logger.warning(
             f"[Loader Warning] Изображение для не найдено по пути '{raw_path}'. "
             f"Используется заглушка по умолчанию: {default_path}"
         )
-        path_obj = Path(default_path)
-        
-    # Если даже дефолтный файл отсутствует, возвращаем как есть (или пустую строку)
-    resolved = str(path_obj).replace("\\", "/") # Нормализация слэшей для Windows
+        candidate = default_path
     
-    # Главное: путь должен начинаться с '/', чтобы ссылаться на app.add_static_files
-    if not resolved.startswith("/"):
-        resolved = f"/{resolved}"
-        
-    return resolved
+    assets_dir = ROOT_DIR / "assets"
+    relative_path = candidate.resolve().relative_to(assets_dir.resolve())
+    return f"/assets/{relative_path.as_posix()}"
 
 # Сервис загрузки персонажей
 def load_characters():

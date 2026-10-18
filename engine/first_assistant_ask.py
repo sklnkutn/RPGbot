@@ -1,10 +1,9 @@
 import json
-from services.db import get_session_messages, get_session_characters_list, _get_last_messages, update_character_status
-from services.loaders import get_adventure_world_info, load_characters, load_prompt, load_prompt_section
+from services.db import get_session_messages, get_session_characters_list, _get_last_messages
+from services.loaders import get_adventure_world_info, load_prompt_section
 from services.server_request import get_server_url, send_http_post
-from services.states import CharStates
    
-async def first_assistant_ask (session_id: int, adventure_id: str, user_text: str, model_name: str) -> str:
+async def first_assistant_ask (session_id: int, adventure_id: str, user_text: str, model_name: str) -> str | None:
     """
     Определение допустимого персонажа по булеву и выбор персонажа из списка
     """
@@ -25,7 +24,7 @@ async def first_assistant_ask (session_id: int, adventure_id: str, user_text: st
                 "type": "boolean"
             }
         }
-        active_character = session_chars[0]
+        single_character = session_chars[0]
     else:
         prompt_key = "prompt_multiple_char"
         required_schema = ["need_new_character", "characters_name"]
@@ -109,22 +108,19 @@ async def first_assistant_ask (session_id: int, adventure_id: str, user_text: st
 
     try:
         parsed_json = json.loads(assistant_message)
-        need_new = parsed_json.get("need_new_character", False)
-        target_char = parsed_json.get("characters_name")
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Некорректный JSON от анализатора персонажей: {assistant_message}") from e
 
-        if need_new and not target_char:
-            session_chars = await get_session_characters_list(session_id)
-            if len(session_chars) == 1:
-                target_char = session_chars[0]
+    need_new = parsed_json.get("need_new_character")
+    if not isinstance(need_new, bool):
+        raise ValueError("Анализатор персонажей не вернул булево поле need_new_character")
+    if not need_new:
+        return None
 
-        # Единая точка активации статуса в базе данных
-        if need_new and target_char:
-            await update_character_status(session_id, target_char, CharStates.ACTIVE)
-            print(f"[First Step Logic] Персонаж '{target_char}' успешно активирован в сессии #{session_id}.")
-        else:
-            print(f"[First Step Logic] Новые персонажи не активированы (need_new={need_new}).")
-            
-    except json.JSONDecodeError:
-        print(f"[First Step Warning] Не удалось распарсить JSON от модели: {assistant_message}")
+    target_char = parsed_json.get("characters_name")
+    if len(session_chars) == 1:
+        target_char = single_character
+    elif target_char not in session_chars:
+        raise ValueError("Анализатор выбрал персонажа, не входящего в сессию")
 
-    return assistant_message
+    return target_char
