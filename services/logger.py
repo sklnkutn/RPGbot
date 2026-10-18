@@ -5,7 +5,9 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 # Папка для хранения лог-файлов
-LOGS_DIR = Path("logs")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+
+LOGS_DIR = ROOT_DIR / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Формат для общих логов конвейера и ошибок

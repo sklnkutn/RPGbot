@@ -4,7 +4,7 @@ from services.loaders import get_adventure_world_info, load_characters, load_pro
 from services.server_request import get_server_url, send_http_post
 from services.states import CharStates
    
-async def first_assistant_ask (session_id: int, adventure_id: str, user_text: str, model_name: str) -> dict:
+async def first_assistant_ask (session_id: int, adventure_id: str, user_text: str, model_name: str) -> str:
     """
     Определение допустимого персонажа по булеву и выбор персонажа из списка
     """

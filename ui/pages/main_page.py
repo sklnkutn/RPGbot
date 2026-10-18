@@ -20,7 +20,7 @@ def setup_main_page():
         #Формирование контейнера по центру
         with ui.column().classes("w-full max-w-3xl mx-auto q-pa-lg items-center"):
             #Изображение лого
-            ui.image('static/logo.png').classes('w-1/3 max-w-[1024px] rounded-lg q-mb-md') 
+            ui.image('./static/logo.png').classes('w-1/3 max-w-[1024px] rounded-lg q-mb-md') 
             #Текст приветсвие
             ui.label(
                 "Добро пожаловать в нашего бота.\n"
@@ -45,6 +45,18 @@ def setup_main_page():
                     ).classes("col")
             # Функция валидации и старта приключения с записью в бд
             async def start_adventure():
+                #Завершилась ли фоновая инициализация селектов
+                if not getattr(llm_select, 'is_ready', False) or not getattr(checkpoint_select, 'is_ready', False):
+                    ui.notify("Подождите, идет загрузка списка моделей с серверов...", type="warning", position="top")
+                    return
+
+                #Проверяем, что выбранные значения — это не тексты-заглушки ошибки/ожидания
+                invalid_states = ["Ожидание подключения к серверу...", "модели не обнаружены", "Сервер недоступен"]
+                
+                if llm_select.value in invalid_states or checkpoint_select.value in invalid_states:
+                    ui.notify("Невозможно начать историю: проверьте подключение к Ollama и ComfyUI", type="negative", position="top")
+                    return
+                    
                 # 1. Проверяем через валидатор
                 error_message = validate_game_start(selected_adventures, selected_characters)
                 if error_message:

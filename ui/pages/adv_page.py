@@ -38,7 +38,7 @@ def setup_adv_page():
                 user_input = ui.textarea(placeholder="Введите ваше действие или реплику...").props("outlined dense rows=3 dark").classes("flex-grow bg-grey-8")
                 #кнопка отправить обновить           
                 with ui.column().classes("w-1/5"):
-                    ui.button(icon="send", on_click=lambda: handle_send(session_id, user_input, chat_container, chat_scroll)).props("color=primary unelevated").classes("h-4")
+                    send_button = ui.button(icon="send", on_click=lambda: handle_send(session_id, user_input, chat_container, chat_scroll, send_button)).props("color=primary unelevated").classes("h-4")
                     ui.button(icon="refresh", on_click=lambda: ui.notify("Перегенерация (заглушка)")).props("color=grey flat text-color=white").classes("h-4")
 
         #первоначальный рендер при открытии

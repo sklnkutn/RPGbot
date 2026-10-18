@@ -3,7 +3,7 @@ from services.loaders import load_character_data, load_prompt_section
 from services.server_request import get_server_url, send_http_post
 from services.db import get_character_full_state, get_session_info
 
-async def third_assistant_ask(session_id: int, active_char_id: str | None, narrator_text: str, model_name: str) -> dict:
+async def third_assistant_ask(session_id: int, active_char_id: str | None, narrator_text: str, model_name: str) -> str:
     """Генерирует визуальный промпт для ComfyUI на основе последнего ответа нарратора."""
     session_info = await get_session_info(session_id)
     comfy_model = session_info.get("comfy_model", "Не указана")

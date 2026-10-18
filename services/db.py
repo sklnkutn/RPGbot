@@ -95,10 +95,39 @@ async def create_session(adventure_id: str, llm_model: str, comfy_model: str, ch
         for char_id in character_ids:
             char_data = char_dict.get(char_id, {}) #поиск персонажа в загруженных YAML-данных
             default_clothing = char_data.get("visual", {}).get("default_clothing", "") #Загрузка дефолтной одежды
+            
+            # Начальное состояние из YAML (relations и known_facts)
+            initial_state = char_data.get("initial_state", {})
+            relations = initial_state.get("relations", {})
+            known_facts = initial_state.get("known_facts", {})
+
+            # Извлекаем шкалы отношений (с дефолтом 0, если в YAML что-то пропущено)
+            trust = relations.get("trust", 0)
+            respect = relations.get("respect", 0)
+            affection = relations.get("affection", 0)
+            annoyance = relations.get("annoyance", 0)
+            fear = relations.get("fear", 0)
+            jealousy = relations.get("jealousy", 0)
+
+            # Извлекаем списки фактов и сериализуем их в JSON-строки
+            about_player = json.dumps(known_facts.get("about_player", []), ensure_ascii=False)
+            about_world = json.dumps(known_facts.get("about_world", []), ensure_ascii=False)
+            about_others = json.dumps(known_facts.get("about_others", []), ensure_ascii=False)
+            about_self = json.dumps(known_facts.get("about_self", []), ensure_ascii=False)
+
+            # Сохраняем персонажа в сессию со всеми начальными параметрами из YAML
             await db.execute("""
-                INSERT INTO session_characters (session_id, character_id, current_clothing)
-                VALUES (?, ?, ?)
-            """, (session_id, char_id, default_clothing))
+                INSERT INTO session_characters (
+                    session_id, character_id, current_clothing,
+                    trust, respect, affection, annoyance, fear, jealousy,
+                    about_player, about_world, about_others, about_self
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                session_id, char_id, default_clothing,
+                trust, respect, affection, annoyance, fear, jealousy,
+                about_player, about_world, about_others, about_self
+            ))
 
         await db.commit()
         return session_id

@@ -4,14 +4,17 @@ import json
 import aiohttp
 from services.server_request import get_server_url
 from pathlib import Path
+from services.logger import logger
 
 #Установка директорий
-CHAR_DIR = Path("data/char")
-ADV_DIR = Path("data/adv")
-PROMPTS_DIR = Path("data/prompts")
-DEFAULT_CHAR_IMAGE = "assets/img/char/in_prog.png"
-DEFAULT_ADV_IMAGE = "assets/img/adv/in_prog.png"
-WORKFLOW_PATH = Path("data/comfy_workflow/bot_workflow.json")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+
+CHAR_DIR = ROOT_DIR / "data" / "char"
+ADV_DIR = ROOT_DIR / "data" / "adv"
+PROMPTS_DIR = ROOT_DIR / "data" / "prompts"
+DEFAULT_CHAR_IMAGE = ROOT_DIR / "assets" / "img" / "char" / "in_prog.png"
+DEFAULT_ADV_IMAGE = ROOT_DIR / "assets" / "img" / "adv" / "in_prog.png"
+WORKFLOW_PATH = ROOT_DIR / "data" / "comfy_workflow" / "bot_workflow.json"
 
 
 def _resolve_image_path(raw_path: str, default_path: str) -> str:
@@ -20,6 +23,10 @@ def _resolve_image_path(raw_path: str, default_path: str) -> str:
     
     # Если путь из YAML не существует на диске, используем дефолтный
     if not raw_path or not path_obj.exists():
+        logger.warning(
+            f"[Loader Warning] Изображение для не найдено по пути '{raw_path}'. "
+            f"Используется заглушка по умолчанию: {default_path}"
+        )
         path_obj = Path(default_path)
         
     # Если даже дефолтный файл отсутствует, возвращаем как есть (или пустую строку)

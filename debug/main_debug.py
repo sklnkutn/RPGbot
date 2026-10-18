@@ -166,4 +166,4 @@ async def start_mock_servers():
 setup_debug_page()
 
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(title="RPG Bot Debug Panel", port=DEBUG_PORT, reload=True, dark=True)
+    ui.run(title="RPG Bot Debug Panel", host="127.0.0.1", port=DEBUG_PORT, reload=False, dark=True)

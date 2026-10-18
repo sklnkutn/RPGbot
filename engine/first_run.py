@@ -8,7 +8,7 @@ def build_chat_payload(adventure_id: str, model_name: str = "llama3") -> dict:
     Загружает системный промпт, обогащает его данными мира и добавляет стартовое сообщение.
     """
     # Загружаем базовый системный промпт из файла
-    base_system_prompt = load_prompt("first_run_promt.yaml")
+    base_system_prompt = load_prompt("first_run_prompt.yaml")
     
     # Получаем параметры мира для конкретного приключения (предполагается, что функция доступна в контексте)
     world_info = get_adventure_world_info(adventure_id)

@@ -1,6 +1,7 @@
 import os
 import json
 from dotenv import load_dotenv
+from services.logger import logger
 from services.loaders import load_character_data, load_prompt
 from services.server_request import get_server_url, send_http_post
 from services.db import get_character_full_state, update_character_turn_state
