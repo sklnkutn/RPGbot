@@ -97,10 +97,15 @@ async def fifth_assistant_ask(session_id: int, model_name: str):
     sum_res = await send_http_post(url, summary_payload, server="ollama")
     
     if isinstance(sum_res, str):
-        summary_text = "События развивались своим чередом."
-    else:
-        summary_text = sum_res.get("message", {}).get("content", "").strip()
+        print(f"[Fifth Step Error] Ошибка сети при суммаризации сессии {session_id}: {sum_res}")
+        return
+    
+    summary_text = sum_res.get("message", {}).get("content", "").strip()
 
+    if not summary_text:
+        print(f"[Fifth Step Warning] Модель вернула пустое резюме для сессии {session_id}. Пропускаем сохранение.")
+        return
+        
     # 5. Записываем архивный чанк в базу данных
     start_id = chunk_messages[0]["id"]
     end_id = chunk_messages[-1]["id"]

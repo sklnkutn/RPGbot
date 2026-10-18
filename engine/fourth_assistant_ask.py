@@ -22,7 +22,7 @@ async def fourth_assistant_ask(session_id: int, active_char_id: str | None, narr
     char_yaml = load_character_data(active_char_id)
     char_db = await get_character_full_state(session_id, active_char_id)
 
-        char_info = (
+    char_info = (
         f"\n\n# Оцениваемый персонаж: {char_yaml.get('name')}\n"
         f"- Характер: {', '.join(char_yaml.get('bio', {}).get('personality_traits', []))}\n"
         f"- Текущая одежда в базе: {char_db.get('current_clothing', 'не указана')}\n"

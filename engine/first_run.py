@@ -78,7 +78,8 @@ async def first_run(session_id: int, adventure_id: str, model_name: str = "llama
         session_id=session_id,
         sender="assistant",
         text=assistant_message,
-        image_path=None  # Картинку для старта пока не генерируем
+        image_path=None,  # Картинку для старта пока не генерируем
+        character_id=None,
     )
     
     return assistant_message

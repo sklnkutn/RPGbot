@@ -13,7 +13,7 @@ RPG_ENGINE_PORT = int(os.getenv("RPG_ENGINE_PORT", 8085))
 # Делает папки доступными по URL-адресу
 app.add_static_files('/static', 'static') # Для картинок персонажей
 app.add_static_files('/assets', 'assets')   # Для картинок персонажей и приключений из YAML
-# app.add_static_files('/outputs', 'outputs') # Для сгенерированных нейросетью картинок чата
+app.add_static_files('/outputs', 'outputs') # Для сгенерированных нейросетью картинок чата
 
 @app.on_startup #связка с базой данных
 async def startup_event():

@@ -51,6 +51,7 @@ async def init_db():
                 sender TEXT NOT NULL,
                 text TEXT NOT NULL,
                 image_path TEXT,
+                character_id TEXT,
                 is_summarized INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
@@ -102,7 +103,7 @@ async def create_session(adventure_id: str, llm_model: str, comfy_model: str, ch
         await db.commit()
         return session_id
 
-async def save_message(session_id: int, sender: str, text: str, image_path: str = None):
+async def save_message(session_id: int, sender: str, text: str, image_path: str = None, character_id: str | None):
     """Сохранение сообщения в историю диалога с привязкой к активному персонажу"""
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("""

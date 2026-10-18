@@ -114,4 +114,4 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
     except Exception as e:
         error_msg = f"[Ошибка игрового конвейера]: {e}"
         print(error_msg)
-        return error_msg
+        raise RuntimeError(error_msg) from e
