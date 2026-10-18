@@ -1,0 +1,6 @@
+pytest
+aiosqlite
+aiohttp
+python-dotenv
+nicegui
+PyYAML
