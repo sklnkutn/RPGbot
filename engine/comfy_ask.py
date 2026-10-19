@@ -1,5 +1,6 @@
 import time
 import random
+import os
 import aiohttp
 import asyncio
 from pathlib import Path
@@ -18,12 +19,15 @@ async def delete_generated_image(image_path: str) -> None:
     if target_path.is_file():
         await asyncio.to_thread(target_path.unlink)
 
-async def generate_comfy_image(session_id: int, comfy_model: str, positive_prompt: str, timeout_seconds: int = 120) -> str | None:
+async def generate_comfy_image(session_id: int, comfy_model: str, positive_prompt: str, timeout_seconds: int | None = None) -> str | None:
     """
     Модифицирует шаблон workflow, отправляет в ComfyUI, ожидает генерации,
     скачивает готовый файл в outputs/ и возвращает веб-путь к нему.
     """
     try:
+        if timeout_seconds is None:
+            timeout_seconds = int(os.getenv("COMFY_GENERATION_TIMEOUT", "1800"))
+
         # 1. Загружаем и модифицируем workflow
         workflow = _load_workflow_template()
 
@@ -75,14 +79,19 @@ async def generate_comfy_image(session_id: int, comfy_model: str, positive_promp
                         if resp.status == 200:
                             history_data = await resp.json()
                             if prompt_id in history_data:
-                                outputs = history_data[prompt_id].get("outputs", {})
+                                task_history = history_data[prompt_id]
+                                task_status = task_history.get("status", {})
+                                if task_status.get("status_str") == "error":
+                                    print(f"[ComfyUI Error] Генерация завершилась ошибкой: {task_status.get('messages', '')}")
+                                    return None
+                                outputs = task_history.get("outputs", {})
                                 # Ищем ноду 9 (SaveImage) в outputs
                                 if "9" in outputs and "images" in outputs["9"]:
                                     images = outputs["9"]["images"]
                                     if images:
                                         image_info = images[0]
                                         break
-            except Exception:
+            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
                 pass  # Временные сетевые сбои при опросе не прерывают цикл
 
         if not image_info:
