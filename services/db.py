@@ -289,6 +289,19 @@ async def get_session_info(session_id: int) -> dict:
                 return dict(row)
             return {}
 
+async def get_all_active_sessions() -> list[dict]:
+    """Получает список всех активных сессий (state = 'in_progress')"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT id, adventure_id, llm_model, comfy_model, state, created_at
+            FROM sessions
+            WHERE state = ?
+            ORDER BY id DESC
+        """, (GameStates.IN_PROGRESS.value,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
 async def update_character_status(session_id: int, character_id: str, status: str):
     """Обновляет статус персонажа (например, 'active' или 'inactive') в сессии"""
     async with aiosqlite.connect(DB_NAME) as db:

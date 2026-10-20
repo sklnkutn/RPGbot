@@ -21,6 +21,8 @@ INPUT_DIR = Path("debug/input")
 INPUT_DIR.mkdir(parents=True, exist_ok=True)
 COMFY_TASKS = {}
 COMFY_IMAGES = {}
+MODEL_LIST_CACHE = {}
+MODEL_LIST_TASKS = {}
 
 # --- ВСПОМОГАТЕЛЬНЫЙ МЕХАНИЗМ МОСТА (BRIDGE WAITER) ---
 
@@ -62,8 +64,75 @@ async def wait_for_input_response(filename: str, task_info: dict, timeout_second
 
 # --- ОБРАБОТЧИКИ OLLAMA (порт 11434) ---
 
+async def get_bridge_model_list(service: str, endpoint: str, endpoint_name: str, validator):
+    cache_key = f"{service}:{endpoint}"
+    if cache_key in MODEL_LIST_CACHE:
+        return web.json_response(MODEL_LIST_CACHE[cache_key])
+
+    task = MODEL_LIST_TASKS.get(cache_key)
+    if task is None:
+        request_payload = {
+            "bridge_type": "model_list",
+            "service": service,
+            "endpoint": endpoint,
+        }
+        filename = Path(save_request_json(endpoint_name, request_payload)).name
+        task_info = {
+            "id": filename,
+            "endpoint": f"GET {endpoint}",
+            "status": "waiting",
+            "preview": f"Получить реальный список моделей {service} через Kaggle",
+        }
+        pending_tasks.append(task_info)
+        task = {"filename": filename, "task_info": task_info}
+        MODEL_LIST_TASKS[cache_key] = task
+        print(f"[Bridge Mode] Запрос списка моделей {service} сохранен: debug/output/{filename}")
+
+    response_path = INPUT_DIR / task["filename"]
+    if not response_path.is_file():
+        return web.json_response(
+            {
+                "status": "pending",
+                "service": service,
+                "endpoint": endpoint,
+                "request_file": task["filename"],
+                "message": "Передайте request JSON на Kaggle и верните JSON-ответ с тем же именем.",
+            },
+            status=503,
+        )
+
+    try:
+        await asyncio.sleep(0.1)
+        with response_path.open("r", encoding="utf-8") as response_file:
+            response_data = json.load(response_file)
+        if not validator(response_data):
+            raise ValueError(f"Неверный формат ответа для GET {endpoint}.")
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"[Bridge Error] Неверный ответ списка моделей {response_path}: {exc}")
+        return web.json_response({"error": str(exc), "request_file": task["filename"]}, status=502)
+
+    MODEL_LIST_CACHE[cache_key] = response_data
+    task["task_info"]["status"] = "completed"
+    response_path.unlink()
+    del MODEL_LIST_TASKS[cache_key]
+    print(f"[Bridge Mode] Список моделей {service} загружен и закеширован.")
+    return web.json_response(response_data)
+
+
 async def handle_ollama_tags(request: web.Request):
-    return web.json_response(get_local_ollama_models())
+    if debug_state["mode"] == "local":
+        return web.json_response(get_local_ollama_models())
+
+    return await get_bridge_model_list(
+        service="ollama",
+        endpoint="/api/tags",
+        endpoint_name="ollama_tags",
+        validator=lambda data: (
+            isinstance(data, dict)
+            and isinstance(data.get("models"), list)
+            and all(isinstance(model, dict) and isinstance(model.get("name"), str) for model in data["models"])
+        ),
+    )
 
 async def handle_ollama_chat(request: web.Request):
     try:
@@ -100,7 +169,15 @@ async def handle_ollama_chat(request: web.Request):
 # --- ОБРАБОТЧИКИ COMFYUI (порт 8188) ---
 
 async def handle_comfy_models(request: web.Request):
-    return web.json_response(get_local_comfy_models())
+    if debug_state["mode"] == "local":
+        return web.json_response(get_local_comfy_models())
+
+    return await get_bridge_model_list(
+        service="comfy",
+        endpoint="/models/checkpoints",
+        endpoint_name="comfy_models_checkpoints",
+        validator=lambda data: isinstance(data, list) and all(isinstance(model, str) for model in data),
+    )
 
 async def handle_comfy_prompt(request: web.Request):
     """Queue a workflow and let bridge mode complete it asynchronously."""

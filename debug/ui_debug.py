@@ -53,7 +53,7 @@ def setup_debug_page():
 
             # Секция Очереди задач (Live Tasks)
             ui.label("📋 Очередь перехваченных запросов (Bridge Tasks)").classes("text-lg font-bold text-gray-300")
-            ui.label("Ollama: ответ JSON в debug/input/<имя_файла>. ComfyUI: положите туда JSON-ответ и указанный в нем файл изображения.").classes("text-xs text-gray-400")
+            ui.label("GET моделей: отправьте файл задания из debug/output на Kaggle и верните реальный JSON-ответ с тем же именем в debug/input. Ollama POST: JSON-ответ. ComfyUI: JSON-ответ и указанный файл изображения.").classes("text-xs text-gray-400")
 
             tasks_container = ui.column().classes("w-full q-mt-sm")
 

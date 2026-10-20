@@ -6,6 +6,7 @@ from ui.components.char_dialog import create_char_dialog
 from ui.components.adv_dialog import create_adv_dialog
 from ui.components.llm_settings import create_llm_settings
 from ui.components.diff_model_settings import create_diff_model_settings
+from ui.components.select_session import select_session
 from engine.first_run import first_run
 
 def setup_main_page():
@@ -44,25 +45,33 @@ def setup_main_page():
                     "Выбор истории", icon="auto_stories", on_click=adv_dialog.open
                     ).classes("col")
             # Функция валидации и старта приключения с записью в бд
+            is_starting = False
             async def start_adventure():
-                #Завершилась ли фоновая инициализация селектов
-                if not getattr(llm_select, 'is_ready', False) or not getattr(checkpoint_select, 'is_ready', False):
-                    ui.notify("Подождите, идет загрузка списка моделей с серверов...", type="warning", position="top")
+                nonlocal is_starting
+                if is_starting:
                     return
 
-                #Проверяем, что выбранные значения — это не тексты-заглушки ошибки/ожидания
-                invalid_states = ["Ожидание подключения к серверу...", "модели не обнаружены", "Сервер недоступен"]
-                
-                if llm_select.value in invalid_states or checkpoint_select.value in invalid_states:
-                    ui.notify("Невозможно начать историю: проверьте подключение к Ollama и ComfyUI", type="negative", position="top")
-                    return
-                    
-                # 1. Проверяем через валидатор
-                error_message = validate_game_start(selected_adventures, selected_characters)
-                if error_message:
-                    ui.notify(error_message, type="warning", position="top")
-                    return
+                is_starting = True
+                start_button.disable()
                 try:
+                    #Завершилась ли фоновая инициализация селектов
+                    if not getattr(llm_select, 'is_ready', False) or not getattr(checkpoint_select, 'is_ready', False):
+                        ui.notify("Подождите, идет загрузка списка моделей с серверов...", type="warning", position="top")
+                        return
+
+                    #Проверяем, что выбранные значения — это не тексты-заглушки ошибки/ожидания
+                    invalid_states = ["Ожидание подключения к серверу...", "модели не обнаружены", "Сервер недоступен"]
+
+                    if llm_select.value in invalid_states or checkpoint_select.value in invalid_states:
+                        ui.notify("Невозможно начать историю: проверьте подключение к Ollama и ComfyUI", type="negative", position="top")
+                        return
+
+                    # 1. Проверяем через валидатор
+                    error_message = validate_game_start(selected_adventures, selected_characters)
+                    if error_message:
+                        ui.notify(error_message, type="warning", position="top")
+                        return
+
                     adventure_id=selected_adventures[0]
                     
                     session_id = await create_session(
@@ -81,8 +90,15 @@ def setup_main_page():
                 except Exception as e:
                     ui.notify(f"Ошибка создания сессии: {e}", type="negative", position="top")
                     print(f"DB Error: {e}")
+                finally:
+                    is_starting = False
+                    start_button.enable()
 
             #Главная кнопка старта
-            ui.button("НАЧАТЬ ИСТОРИЮ", icon="play_arrow", on_click=start_adventure).props(
+            start_button = ui.button("НАЧАТЬ ИСТОРИЮ", icon="play_arrow", on_click=start_adventure).props(
+                "color=green size=lg"
+            ).classes("w-full font-bold")
+            open_session_dialog = select_session()
+            ui.button("ЗАГРУЗИТЬ ИСТОРИЮ", icon="history", on_click=open_session_dialog).props(
                 "color=green size=lg"
             ).classes("w-full font-bold")

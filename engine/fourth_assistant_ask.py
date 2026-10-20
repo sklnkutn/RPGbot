@@ -76,6 +76,7 @@ async def fourth_assistant_ask(session_id: int, active_char_id: str | None, narr
             "required": ["relation_shifts", "clothing_changed", "new_clothing", "leaves_scene"]
         },
         "stream": False,
+        "keep_alive": 0,
         "options": {
             "temperature": 0.1,  # Строгий режим оценщика
             "num_ctx": 2048

@@ -71,6 +71,7 @@ async def fifth_assistant_ask(session_id: int, model_name: str):
                     "required": ["about_player", "about_world", "about_self"]
                 },
                 "stream": False,
+                "keep_alive": 0,
                 "options": {"temperature": 0.2, "num_ctx": 3072}
             }
 
@@ -97,6 +98,7 @@ async def fifth_assistant_ask(session_id: int, model_name: str):
         "model": model_name,
         "messages": summary_messages,
         "stream": False,
+        "keep_alive": 0,
         "options": {"temperature": 0.5, "num_ctx": 3072}
     }
 

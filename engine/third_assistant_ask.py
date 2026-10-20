@@ -42,6 +42,7 @@ async def third_assistant_ask(session_id: int, active_char_id: str | None, narra
         "model": model_name,
         "messages": messages,
         "stream": False,
+        "keep_alive": 0,
         "options": {
             "temperature": 0.3,  # Для промптов лучше низкая температура (меньше галлюцинаций)
             "num_ctx": 2048

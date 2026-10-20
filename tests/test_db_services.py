@@ -1,5 +1,6 @@
 import asyncio
 
+import aiosqlite
 import pytest
 
 from services import db
@@ -120,6 +121,56 @@ def test_create_session_persists_character_initial_facts(tmp_path, monkeypatch):
         assert state["character_status"] == "inactive"
         assert state["about_player"] == []
         assert state["about_world"] == []
+
+    asyncio.run(run_test())
+
+
+def test_get_all_active_sessions_returns_empty_list_when_no_sessions(tmp_path, monkeypatch):
+    async def run_test():
+        monkeypatch.setattr(db, "DB_NAME", str(tmp_path / "sessions.db"))
+        await db.init_db()
+
+        assert await db.get_all_active_sessions() == []
+
+    asyncio.run(run_test())
+
+
+def test_get_all_active_sessions_filters_states_and_returns_newest_first(tmp_path, monkeypatch):
+    async def run_test():
+        monkeypatch.setattr(db, "DB_NAME", str(tmp_path / "sessions.db"))
+        await db.init_db()
+
+        first_session = await db.create_session(
+            "deserted_island", "model-a", "checkpoint-a", []
+        )
+        paused_session = await db.create_session(
+            "infinity_train", "model-b", "checkpoint-b", []
+        )
+        ended_session = await db.create_session(
+            "deserted_island", "model-ended", "checkpoint-ended", []
+        )
+        newest_session = await db.create_session(
+            "adv_road_777", "model-c", "checkpoint-c", []
+        )
+
+        async with aiosqlite.connect(db.DB_NAME) as connection:
+            await connection.executemany(
+                "UPDATE sessions SET state = ? WHERE id = ?",
+                [
+                    (db.GameStates.ON_HOLD.value, paused_session),
+                    (db.GameStates.END.value, ended_session),
+                ],
+            )
+            await connection.commit()
+
+        sessions = await db.get_all_active_sessions()
+
+        assert [session["id"] for session in sessions] == [newest_session, first_session]
+        assert sessions[0]["adventure_id"] == "adv_road_777"
+        assert sessions[0]["llm_model"] == "model-c"
+        assert sessions[0]["comfy_model"] == "checkpoint-c"
+        assert sessions[0]["state"] == db.GameStates.IN_PROGRESS.value
+        assert sessions[0]["created_at"]
 
     asyncio.run(run_test())
 
