@@ -1,4 +1,5 @@
 import os
+from collections.abc import Awaitable, Callable
 from dotenv import load_dotenv
 from services.states import GameStates
 from services.logger import logger, state_logger
@@ -14,7 +15,11 @@ from engine.comfy_ask import delete_generated_image
 load_dotenv()
 MAX_MESSAGE_COUNT_BEFORE_SUMM = int(os.getenv("MAX_MESSAGE_COUNT_BEFORE_SUMM", 20))
 
-async def process_player_turn(session_id: int, user_text: str) -> str:
+async def process_player_turn(
+    session_id: int,
+    user_text: str,
+    on_turn_committed: Callable[[], Awaitable[None]] | None = None,
+) -> str:
     """
     Полный конвейер обработки хода игрока:
     1. Определение активного спутника (или активация через Шаг 1).
@@ -117,6 +122,12 @@ async def process_player_turn(session_id: int, user_text: str) -> str:
             except Exception:
                 logger.exception(f"{ctx} Не удалось удалить изображение незаписанного хода")
             raise
+
+        if on_turn_committed is not None:
+            try:
+                await on_turn_committed()
+            except Exception:
+                logger.exception(f"{ctx} Не удалось уведомить интерфейс о сохранении хода")
 
         # Архивация выполняется после фиксации хода и не меняет его статус для пользователя.
         try:

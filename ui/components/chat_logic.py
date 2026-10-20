@@ -51,21 +51,27 @@ async def handle_send(session_id: int, user_input, chat_container, chat_scroll, 
 
         try:
             ui.notify("Анализ хода...", type="info", position="top", timeout=1000)
-        
+
+            async def on_turn_committed():
+                user_input.value = ""
+                try:
+                    await render_messages(session_id, chat_container, chat_scroll)
+                except Exception as e:
+                    ui.notify(
+                        f"Ход сохранён, но не удалось обновить историю: {e}. Перезагрузите страницу.",
+                        type="warning",
+                        position="top",
+                    )
+                finally:
+                    user_input.enable()
+
             # Запускаем наш конвейер обработки хода
-            await process_player_turn(session_id=session_id, user_text=text)
-        
-            user_input.value = ""
-            # Перерисовываем чат, подтягивая новые сообщения из БД
-            try:
-                await render_messages(session_id, chat_container, chat_scroll)
-            except Exception as e:
-                ui.notify(
-                    f"Ход завершён, но не удалось обновить историю: {e}. Перезагрузите страницу.",
-                    type="warning",
-                    position="top",
-                )
-        
+            await process_player_turn(
+                session_id=session_id,
+                user_text=text,
+                on_turn_committed=on_turn_committed,
+            )
+
         except Exception as e:
             ui.notify(f"Ошибка: {e}", type="negative", position="top")
             print(f"Chat Logic Error: {e}")
