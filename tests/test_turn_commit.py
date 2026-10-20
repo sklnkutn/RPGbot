@@ -148,6 +148,69 @@ def test_commit_player_turn_rolls_back_state_and_messages_if_message_insert_fail
     asyncio.run(run_test())
 
 
+def test_player_turn_routes_models_to_configured_assistants(monkeypatch):
+    async def run_test():
+        model_calls = {}
+
+        async def get_session_info(_session_id):
+            return {
+                "state": "in_progress",
+                "adventure_id": "adventure",
+                "llm_model": "primary-model",
+                "secondary_llm_model": "secondary-model",
+                "comfy_model": "checkpoint",
+            }
+
+        async def get_active_session_characters(_session_id):
+            return []
+
+        async def first_assistant_ask(**kwargs):
+            model_calls["first"] = kwargs["model_name"]
+            return "char-a"
+
+        async def second_assistant_ask(**kwargs):
+            model_calls["second"] = kwargs["model_name"]
+            return "Сцена нарратора."
+
+        async def third_assistant_ask(**kwargs):
+            model_calls["third"] = kwargs["model_name"]
+            return "scene prompt"
+
+        async def fourth_assistant_ask(**kwargs):
+            model_calls["fourth"] = kwargs["model_name"]
+            return {}
+
+        async def generate_comfy_image(**_kwargs):
+            return "/outputs/scene.png"
+
+        async def commit_player_turn(**_kwargs):
+            return None
+
+        monkeypatch.setattr(main_engine, "get_session_info", get_session_info)
+        monkeypatch.setattr(main_engine, "get_active_session_characters", get_active_session_characters)
+        monkeypatch.setattr(main_engine, "first_assistant_ask", first_assistant_ask)
+        monkeypatch.setattr(main_engine, "second_assistant_ask", second_assistant_ask)
+        monkeypatch.setattr(main_engine, "third_assistant_ask", third_assistant_ask)
+        monkeypatch.setattr(main_engine, "fourth_assistant_ask", fourth_assistant_ask)
+        monkeypatch.setattr(main_engine, "generate_comfy_image", generate_comfy_image)
+        monkeypatch.setattr(main_engine, "commit_player_turn", commit_player_turn)
+        monkeypatch.setattr(main_engine, "get_unsummarized_messages", lambda _session_id: resolved([]))
+
+        await main_engine.process_player_turn(session_id=1, user_text="Действие игрока")
+
+        assert model_calls == {
+            "first": "secondary-model",
+            "second": "primary-model",
+            "third": "secondary-model",
+            "fourth": "secondary-model",
+        }
+
+    async def resolved(value):
+        return value
+
+    asyncio.run(run_test())
+
+
 def test_image_failure_does_not_commit_player_turn(monkeypatch):
     async def run_test():
         commit_called = False
@@ -157,6 +220,7 @@ def test_image_failure_does_not_commit_player_turn(monkeypatch):
                 "state": "in_progress",
                 "adventure_id": "adventure",
                 "llm_model": "model",
+                "secondary_llm_model": "secondary-model",
                 "comfy_model": "checkpoint",
             }
 
@@ -204,6 +268,7 @@ def test_turn_is_rendered_before_summarization(monkeypatch):
                 "state": "in_progress",
                 "adventure_id": "adventure",
                 "llm_model": "model",
+                "secondary_llm_model": "secondary-model",
                 "comfy_model": "checkpoint",
             }
 

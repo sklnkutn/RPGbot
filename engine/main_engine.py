@@ -47,6 +47,7 @@ async def process_player_turn(
 
     adventure_id = session_info.get("adventure_id")
     llm_model = session_info.get("llm_model")
+    secondary_llm_model = session_info.get("secondary_llm_model")
     comfy_model = session_info.get("comfy_model")
 
     try:
@@ -59,7 +60,7 @@ async def process_player_turn(
                 session_id=session_id,
                 adventure_id=adventure_id,
                 user_text=user_text,
-                model_name=llm_model
+                model_name=secondary_llm_model
             )
         else:
             logger.info(f"{ctx} [Шаг 1] Спутник '{active_chars[0]}' на сцене. Пропуск активации.")
@@ -81,7 +82,7 @@ async def process_player_turn(
             session_id=session_id,
             active_char_id=active_char_id,
             narrator_text=narrator_text,
-            model_name=llm_model
+            model_name=secondary_llm_model
         )
 
         # 6. Шаг 4: Оценка реакции спутника, сдвига отношений и одежды
@@ -93,7 +94,7 @@ async def process_player_turn(
                 active_char_id=active_char_id,
                 narrator_text=narrator_text,
                 image_prompt=image_prompt,
-                model_name=llm_model
+                model_name=secondary_llm_model
             )
 
         # 7. Генерация изображения через ComfyUI

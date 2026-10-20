@@ -17,10 +17,21 @@ async def init_db():
                 state TEXT NOT NULL DEFAULT 'in_progress',
                 adventure_id TEXT NOT NULL,
                 llm_model TEXT NOT NULL,
+                secondary_llm_model TEXT NOT NULL,
                 comfy_model TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        async with db.execute("PRAGMA table_info(sessions)") as cursor:
+            session_columns = {row[1] for row in await cursor.fetchall()}
+        if "secondary_llm_model" not in session_columns:
+            await db.execute(
+                "ALTER TABLE sessions ADD COLUMN secondary_llm_model TEXT NOT NULL DEFAULT ''"
+            )
+            await db.execute(
+                "UPDATE sessions SET secondary_llm_model = llm_model WHERE secondary_llm_model = ''"
+            )
 
         # Таблица персонажей, участвующих в конкретной сессии (с динамическими параметрами)
         await db.execute("""
@@ -74,7 +85,13 @@ async def init_db():
         
         await db.commit()        
 
-async def create_session(adventure_id: str, llm_model: str, comfy_model: str, character_ids: list[str]) -> int:
+async def create_session(
+    adventure_id: str,
+    llm_model: str,
+    secondary_llm_model: str,
+    comfy_model: str,
+    character_ids: list[str],
+) -> int:
     """Создание новой игровой сессии, привязка персонажей и возвращение ID сессии"""
     
     all_characters = load_characters() # Загрузка персонажей из YAML
@@ -85,9 +102,9 @@ async def create_session(adventure_id: str, llm_model: str, comfy_model: str, ch
 
         #создание сессии со статусом IN_PROGRESS
         cursor = await db.execute("""
-            INSERT INTO sessions (state, adventure_id, llm_model, comfy_model)
-            VALUES (?, ?, ?, ?)
-        """, (GameStates.IN_PROGRESS, adventure_id, llm_model, comfy_model))
+            INSERT INTO sessions (state, adventure_id, llm_model, secondary_llm_model, comfy_model)
+            VALUES (?, ?, ?, ?, ?)
+        """, (GameStates.IN_PROGRESS, adventure_id, llm_model, secondary_llm_model, comfy_model))
         
         session_id = cursor.lastrowid
 
@@ -280,7 +297,7 @@ async def get_session_info(session_id: int) -> dict:
     async with aiosqlite.connect(DB_NAME) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("""
-            SELECT adventure_id, llm_model, comfy_model, state 
+            SELECT adventure_id, llm_model, secondary_llm_model, comfy_model, state
             FROM sessions 
             WHERE id = ?
         """, (session_id,)) as cursor:
@@ -294,7 +311,7 @@ async def get_all_active_sessions() -> list[dict]:
     async with aiosqlite.connect(DB_NAME) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("""
-            SELECT id, adventure_id, llm_model, comfy_model, state, created_at
+            SELECT id, adventure_id, llm_model, secondary_llm_model, comfy_model, state, created_at
             FROM sessions
             WHERE state = ?
             ORDER BY id DESC

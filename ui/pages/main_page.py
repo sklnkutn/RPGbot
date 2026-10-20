@@ -31,9 +31,11 @@ def setup_main_page():
             #Выбор моделей LLM, ComfyUI(выпадающие списки)
             with ui.card().classes("w-full q-pa-md q-mb-md bg-grey-9 text-white"):
                 ui.label("Настройка генерации").classes("text-sm text-gray-400 font-bold q-mb-sm text-center w-full")
-                # Один общий ряд для всех элементов в одну линию
+                # Модели языковых ассистентов
                 with ui.row().classes("w-full q-gutter-x-sm items-center"):
-                    llm_select = create_llm_settings()
+                    primary_llm_select, secondary_llm_select = create_llm_settings()
+                # Модель визуализации
+                with ui.row().classes("w-full q-gutter-x-sm items-center"):
                     checkpoint_select = create_diff_model_settings()
             #Настройки сюжета
             ui.label("Настройки сюжета").classes("text-sm text-gray-500 q-mb-xs")
@@ -55,14 +57,22 @@ def setup_main_page():
                 start_button.disable()
                 try:
                     #Завершилась ли фоновая инициализация селектов
-                    if not getattr(llm_select, 'is_ready', False) or not getattr(checkpoint_select, 'is_ready', False):
+                    if (
+                        not getattr(primary_llm_select, 'is_ready', False)
+                        or not getattr(secondary_llm_select, 'is_ready', False)
+                        or not getattr(checkpoint_select, 'is_ready', False)
+                    ):
                         ui.notify("Подождите, идет загрузка списка моделей с серверов...", type="warning", position="top")
                         return
 
                     #Проверяем, что выбранные значения — это не тексты-заглушки ошибки/ожидания
                     invalid_states = ["Ожидание подключения к серверу...", "модели не обнаружены", "Сервер недоступен"]
 
-                    if llm_select.value in invalid_states or checkpoint_select.value in invalid_states:
+                    if (
+                        primary_llm_select.value in invalid_states
+                        or secondary_llm_select.value in invalid_states
+                        or checkpoint_select.value in invalid_states
+                    ):
                         ui.notify("Невозможно начать историю: проверьте подключение к Ollama и ComfyUI", type="negative", position="top")
                         return
 
@@ -76,14 +86,15 @@ def setup_main_page():
                     
                     session_id = await create_session(
                         adventure_id=adventure_id,
-                        llm_model=llm_select.value,
+                        llm_model=primary_llm_select.value,
+                        secondary_llm_model=secondary_llm_select.value,
                         comfy_model=checkpoint_select.value,
                         character_ids=selected_characters
                     )
                     await first_run(
                         session_id=session_id, 
                         adventure_id=adventure_id, 
-                        model_name=llm_select.value
+                        model_name=primary_llm_select.value
                     )
                     ui.notify(f"Сессия #{session_id} успешно создана!", type="positive", position="top")
                     ui.navigate.to(f'/adventure?session_id={session_id}')

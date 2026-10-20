@@ -54,7 +54,8 @@ def select_session():
                                     "Персонажи: " + (", ".join(character_names) or "не выбраны")
                                 ).classes("text-sm")
                                 ui.label(
-                                    f"Модель: {session['llm_model']} · "
+                                    f"Модели: {session['llm_model']} / "
+                                    f"{session['secondary_llm_model']} · "
                                     f"ComfyUI: {session['comfy_model']}"
                                 ).classes("text-xs text-grey-6")
 

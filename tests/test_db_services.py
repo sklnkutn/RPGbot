@@ -6,6 +6,41 @@ import pytest
 from services import db
 
 
+def test_init_db_adds_secondary_model_to_existing_sessions_table(tmp_path, monkeypatch):
+    async def run_test():
+        monkeypatch.setattr(db, "DB_NAME", str(tmp_path / "existing.db"))
+        async with aiosqlite.connect(db.DB_NAME) as connection:
+            await connection.execute("""
+                CREATE TABLE sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    state TEXT NOT NULL DEFAULT 'in_progress',
+                    adventure_id TEXT NOT NULL,
+                    llm_model TEXT NOT NULL,
+                    comfy_model TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            await connection.execute(
+                """
+                INSERT INTO sessions (adventure_id, llm_model, comfy_model)
+                VALUES ('adventure', 'legacy-model', 'checkpoint')
+                """
+            )
+            await connection.commit()
+
+        await db.init_db()
+
+        assert await db.get_session_info(1) == {
+            "adventure_id": "adventure",
+            "llm_model": "legacy-model",
+            "secondary_llm_model": "legacy-model",
+            "comfy_model": "checkpoint",
+            "state": "in_progress",
+        }
+
+    asyncio.run(run_test())
+
+
 def test_session_messages_character_state_and_summaries_round_trip(tmp_path, monkeypatch):
     async def run_test():
         monkeypatch.setattr(db, "DB_NAME", str(tmp_path / "session.db"))
@@ -14,12 +49,14 @@ def test_session_messages_character_state_and_summaries_round_trip(tmp_path, mon
         session_id = await db.create_session(
             adventure_id="deserted_island",
             llm_model="llama3",
+            secondary_llm_model="llama3",
             comfy_model="checkpoint",
             character_ids=["char_black_widow"],
         )
         assert (await db.get_session_info(session_id)) == {
             "adventure_id": "deserted_island",
             "llm_model": "llama3",
+            "secondary_llm_model": "llama3",
             "comfy_model": "checkpoint",
             "state": "in_progress",
         }
@@ -112,6 +149,7 @@ def test_create_session_persists_character_initial_facts(tmp_path, monkeypatch):
         session_id = await db.create_session(
             adventure_id="infinity_train",
             llm_model="model",
+            secondary_llm_model="secondary-model",
             comfy_model="checkpoint",
             character_ids=["char_mavis_dracula"],
         )
@@ -141,16 +179,16 @@ def test_get_all_active_sessions_filters_states_and_returns_newest_first(tmp_pat
         await db.init_db()
 
         first_session = await db.create_session(
-            "deserted_island", "model-a", "checkpoint-a", []
+            "deserted_island", "model-a", "secondary-a", "checkpoint-a", []
         )
         paused_session = await db.create_session(
-            "infinity_train", "model-b", "checkpoint-b", []
+            "infinity_train", "model-b", "secondary-b", "checkpoint-b", []
         )
         ended_session = await db.create_session(
-            "deserted_island", "model-ended", "checkpoint-ended", []
+            "deserted_island", "model-ended", "secondary-ended", "checkpoint-ended", []
         )
         newest_session = await db.create_session(
-            "adv_road_777", "model-c", "checkpoint-c", []
+            "adv_road_777", "model-c", "secondary-c", "checkpoint-c", []
         )
 
         async with aiosqlite.connect(db.DB_NAME) as connection:
@@ -168,6 +206,7 @@ def test_get_all_active_sessions_filters_states_and_returns_newest_first(tmp_pat
         assert [session["id"] for session in sessions] == [newest_session, first_session]
         assert sessions[0]["adventure_id"] == "adv_road_777"
         assert sessions[0]["llm_model"] == "model-c"
+        assert sessions[0]["secondary_llm_model"] == "secondary-c"
         assert sessions[0]["comfy_model"] == "checkpoint-c"
         assert sessions[0]["state"] == db.GameStates.IN_PROGRESS.value
         assert sessions[0]["created_at"]
@@ -182,7 +221,9 @@ def test_commit_player_turn_rejects_missing_or_incomplete_character_state(
     async def run_test():
         monkeypatch.setattr(db, "DB_NAME", str(tmp_path / "session.db"))
         await db.init_db()
-        session_id = await db.create_session("deserted_island", "model", "checkpoint", ["char_black_widow"])
+        session_id = await db.create_session(
+            "deserted_island", "model", "secondary-model", "checkpoint", ["char_black_widow"]
+        )
 
         with pytest.raises((ValueError, KeyError)):
             await db.commit_player_turn(
