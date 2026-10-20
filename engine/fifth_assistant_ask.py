@@ -98,7 +98,6 @@ async def fifth_assistant_ask(session_id: int, model_name: str):
         "model": model_name,
         "messages": summary_messages,
         "stream": False,
-        "keep_alive": 0,
         "options": {"temperature": 0.5, "num_ctx": 3072}
     }
 

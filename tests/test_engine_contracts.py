@@ -213,6 +213,12 @@ def test_third_assistant_uses_fallback_for_empty_visual_prompt(monkeypatch):
         async def resolved(value):
             return value
 
+        payloads = []
+
+        async def send_http_post(_url, payload, **_kwargs):
+            payloads.append(payload)
+            return {"message": {"content": "   "}}
+
         monkeypatch.setattr(
             third_assistant_ask,
             "get_session_info",
@@ -221,12 +227,30 @@ def test_third_assistant_uses_fallback_for_empty_visual_prompt(monkeypatch):
         monkeypatch.setattr(third_assistant_ask, "load_prompt_section", lambda *_args: "visual system")
         monkeypatch.setattr(
             third_assistant_ask,
+            "load_character_data",
+            lambda _character: {
+                "name": "Character",
+                "visual": {"base_prompt": "character tags", "default_clothing": "uniform"},
+            },
+        )
+        monkeypatch.setattr(
+            third_assistant_ask,
+            "get_character_full_state",
+            lambda *_args: resolved({"current_clothing": "uniform"}),
+        )
+        monkeypatch.setattr(
+            third_assistant_ask,
             "send_http_post",
-            lambda *_args, **_kwargs: resolved({"message": {"content": "   "}}),
+            send_http_post,
         )
 
         prompt = await third_assistant_ask.third_assistant_ask(1, None, "Narrator scene", "model")
+        await third_assistant_ask.third_assistant_ask(1, "char-a", "Narrator scene", "model")
 
         assert prompt == "masterpiece, best quality, cinematic lighting, atmospheric"
+        assert payloads[0]["think"] is False
+        assert payloads[0]["keep_alive"] == 0
+        assert payloads[1]["think"] is False
+        assert "keep_alive" not in payloads[1]
 
     asyncio.run(run_test())

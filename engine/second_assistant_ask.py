@@ -119,9 +119,8 @@ async def second_assistant_ask(
         "model": model_name,
         "messages": formatted_messages,
         "stream": False,
-        "keep_alive": 0,
         "options": {
-            "temperature": 0.7,
+            "temperature": 0.8,
             "num_ctx": 4096
         }
     }

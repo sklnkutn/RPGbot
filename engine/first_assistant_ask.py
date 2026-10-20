@@ -83,7 +83,6 @@ async def first_assistant_ask (session_id: int, adventure_id: str, user_text: st
             "required": required_schema
         },
         "stream": False,
-        "keep_alive": 0,
         "options": {
             "temperature": 0.7,
             "num_ctx": 4096

@@ -44,7 +44,7 @@ def build_chat_payload(adventure_id: str, model_name: str = "llama3") -> dict:
         "keep_alive": 0,
         "options": {
             "temperature": 0.7,
-            "num_ctx": 4096
+            "num_ctx": 2048
         }
     }
 
